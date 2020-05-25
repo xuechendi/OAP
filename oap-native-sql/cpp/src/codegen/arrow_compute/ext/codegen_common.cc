@@ -82,7 +82,7 @@ class CodeGenBase {
 int FileSpinLock(std::string path) {
   std::string lockfile = path + "/nativesql_compile.lock";
 
-  auto fd = open(lockfile.c_str(), O_CREAT);
+  auto fd = open(lockfile.c_str(), O_CREAT, S_IRWXU | S_IRWXG);
   flock(fd, LOCK_EX);
 
   return fd;
@@ -145,8 +145,23 @@ arrow::Status CompileCodes(std::string codes, std::string signature) {
   out.close();
 
   // compile the code
-  std::string cmd = "gcc -std=c++11 -Wall -Wextra " + cppfile + " -o " + libfile +
-                    " -O3 -shared -fPIC -larrow 2> " + logfile;
+  const char* env_gcc_ = std::getenv("CC");
+  if (env_gcc_ == nullptr) {
+    env_gcc_ = "gcc";
+  }
+  std::string env_gcc = std::string(env_gcc_);
+
+  const char* env_arrow_dir = std::getenv("LIBARROW_DIR");
+  std::string arrow_header;
+  std::string arrow_lib;
+  if (env_arrow_dir != nullptr) {
+    arrow_header = " -I" + std::string(env_arrow_dir) + "/include ";
+    arrow_lib = " -L" + std::string(env_arrow_dir) + "/lib64 ";
+  }
+  // compile the code
+  std::string cmd = env_gcc + " -std=c++11 -Wall -Wextra " + arrow_header + arrow_lib +
+                    cppfile + " -o " + libfile + " -O3 -shared -fPIC -larrow 2> " +
+                    logfile;
   int ret = system(cmd.c_str());
   if (WEXITSTATUS(ret) != EXIT_SUCCESS) {
     std::cout << "compilation failed, see " << logfile << std::endl;
