@@ -167,6 +167,22 @@ if(NOT GANDIVA_LIB)
     message(FATAL_ERROR "Gandiva library not found")
 endif()
 
+set(CODEGEN_HEADERS
+    third_party/
+    )
+file(MAKE_DIRECTORY ${root_directory}/releases/include)
+file(MAKE_DIRECTORY ${root_directory}/releases/include/codegen/common/)
+file(MAKE_DIRECTORY ${root_directory}/releases/include/codegen/third_party/)
+file(MAKE_DIRECTORY ${root_directory}/releases/include/codegen/arrow_compute/ext/)
+file(COPY third_party/ DESTINATION ${root_directory}/releases/include/)
+file(COPY third_party/ DESTINATION ${root_directory}/releases/include/third_party/)
+file(COPY codegen/arrow_compute/ext/array_item_index.h DESTINATION ${root_directory}/releases/include/codegen/arrow_compute/ext/)
+file(COPY codegen/arrow_compute/ext/code_generator_base.h DESTINATION ${root_directory}/releases/include/codegen/arrow_compute/ext/)
+file(COPY codegen/arrow_compute/ext/kernels_ext.h DESTINATION ${root_directory}/releases/include/codegen/arrow_compute/ext/)
+file(COPY codegen/common/result_iterator.h DESTINATION ${root_directory}/releases/include/codegen/common/)
+
+add_compile_definitions(NATIVESQL_SRC_PATH="${root_directory}/releases")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-deprecated-declarations")
 set(SPARK_COLUMNAR_PLUGIN_SRCS
         jni/jni_wrapper.cc
         ${PROTO_SRCS}

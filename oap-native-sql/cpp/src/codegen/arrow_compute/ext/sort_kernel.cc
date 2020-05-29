@@ -156,7 +156,7 @@ class SortArraysToIndicesKernel::Impl {
     signature_ss << std::hex << std::hash<std::string>{}(func_args_ss.str());
     std::string signature = signature_ss.str();
 
-    auto file_lock = FileSpinLock("/tmp");
+    auto file_lock = FileSpinLock();
     auto status = LoadLibrary(signature, ctx_, out);
     if (!status.ok()) {
       // process

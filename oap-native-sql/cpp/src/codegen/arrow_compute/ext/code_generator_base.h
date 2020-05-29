@@ -18,8 +18,6 @@
 #pragma once
 #include <arrow/array.h>
 #include <arrow/type.h>
-#include "codegen/arrow_compute/ext/array_item_index.h"
-#include "codegen/arrow_compute/ext/kernels_ext.h"
 #include "codegen/common/result_iterator.h"
 
 #include <memory>

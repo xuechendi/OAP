@@ -52,26 +52,12 @@ std::string BaseCodes() {
 #include "codegen/arrow_compute/ext/code_generator_base.h"
 #include "codegen/arrow_compute/ext/kernels_ext.h"
 #include "codegen/common/result_iterator.h"
+#include "sparsehash/sparse_hash_map.h"
 #include "third_party/arrow/utils/hashing.h"
-#include "third_party/sparsehash/sparse_hash_map.h"
 
 using namespace sparkcolumnarplugin::codegen::arrowcompute::extra;
 
 )";
-}
-
-int FileSpinLock(std::string path) {
-  std::string lockfile = path + "/nativesql_compile.lock";
-
-  auto fd = open(lockfile.c_str(), O_CREAT, S_IRWXU | S_IRWXG);
-  flock(fd, LOCK_EX);
-
-  return fd;
-}
-
-void FileSpinUnLock(int fd) {
-  flock(fd, LOCK_UN);
-  close(fd);
 }
 
 std::string GetArrowTypeDefString(std::shared_ptr<arrow::DataType> type) {
@@ -169,10 +155,41 @@ std::string GetTypeString(std::shared_ptr<arrow::DataType> type, std::string tai
   }
 }
 
+std::string GetTempPath() {
+  std::string tmp_dir_;
+  const char* env_tmp_dir = std::getenv("NATIVESQL_TMP_DIR");
+  if (env_tmp_dir != nullptr) {
+    tmp_dir_ = std::string(env_tmp_dir);
+  } else {
+#ifdef NATIVESQL_SRC_PATH
+    tmp_dir_ = NATIVESQL_SRC_PATH;
+#else
+    std::cerr << "envioroment variable NATIVESQL_TMP_DIR is not set" << std::endl;
+    throw;
+#endif
+  }
+  return tmp_dir_;
+}
+
+int FileSpinLock() {
+  std::string lockfile = GetTempPath() + "/nativesql_compile.lock";
+
+  auto fd = open(lockfile.c_str(), O_CREAT, S_IRWXU | S_IRWXG);
+  flock(fd, LOCK_EX);
+
+  return fd;
+}
+
+void FileSpinUnLock(int fd) {
+  flock(fd, LOCK_UN);
+  close(fd);
+}
+
 arrow::Status CompileCodes(std::string codes, std::string signature) {
   // temporary cpp/library output files
   srand(time(NULL));
-  std::string outpath = "/tmp";
+  std::string outpath = GetTempPath() + "/tmp/";
+  mkdir(outpath.c_str(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
   std::string prefix = "/spark-columnar-plugin-codegen-";
   std::string cppfile = outpath + prefix + signature + ".cc";
   std::string libfile = outpath + prefix + signature + ".so";
@@ -196,30 +213,25 @@ arrow::Status CompileCodes(std::string codes, std::string signature) {
   std::string env_gcc = std::string(env_gcc_);
 
   const char* env_arrow_dir = std::getenv("LIBARROW_DIR");
-  const char* env_nativesql_dir = std::getenv("LIBSPARKSQLPLUGIN_DIR");
   std::string arrow_header;
-  std::string nativesql_header;
   std::string arrow_lib;
+  std::string nativesql_header = " -I" + GetTempPath() + "/include/ ";
+  std::string nativesql_lib = " -L" + GetTempPath() + " ";
   if (env_arrow_dir != nullptr) {
     arrow_header = " -I" + std::string(env_arrow_dir) + "/include ";
     arrow_lib = " -L" + std::string(env_arrow_dir) + "/lib64 ";
   }
-  if (env_nativesql_dir != nullptr) {
-    nativesql_header = " -I" + std::string(env_nativesql_dir) + " ";
-  } else {
-    // std::cout << "compilation failed, please export LIBSPARKSQLPLUGIN_DIR" <<
-    // std::endl; exit(EXIT_FAILURE);
-    nativesql_header = " -I/mnt/nvme2/chendi/intel-bigdata/OAP/oap-native-sql/cpp/src/ ";
-  }
-  auto sparsemap_header =
-      nativesql_header.substr(0, (nativesql_header.size() - 1)) + "/third_party/ ";
   // compile the code
-  std::string cmd = env_gcc + " -std=c++11 -Wall -Wextra " + arrow_header + arrow_lib +
-                    nativesql_header + sparsemap_header + cppfile + " -o " + libfile +
-                    " -O3 -shared -fPIC -larrow -lspark_columnar_jni 2> " + logfile;
+  std::string cmd = env_gcc + " -std=c++11 -Wno-deprecated-declarations " + arrow_header +
+                    arrow_lib + nativesql_header + nativesql_lib + cppfile + " -o " +
+                    libfile + " -O3 -shared -fPIC -larrow -lspark_columnar_jni 2> " +
+                    logfile;
   int ret = system(cmd.c_str());
   if (WEXITSTATUS(ret) != EXIT_SUCCESS) {
     std::cout << "compilation failed, see " << logfile << std::endl;
+    std::cout << cmd << std::endl;
+    cmd = "ls " + GetTempPath() + "; cat " + logfile;
+    system(cmd.c_str());
     exit(EXIT_FAILURE);
   }
 
@@ -235,10 +247,9 @@ arrow::Status CompileCodes(std::string codes, std::string signature) {
 
 arrow::Status LoadLibrary(std::string signature, arrow::compute::FunctionContext* ctx,
                           std::shared_ptr<CodeGenBase>* out) {
-  std::string outpath = "/tmp";
+  std::string outpath = GetTempPath() + "/tmp/";
   std::string prefix = "/spark-columnar-plugin-codegen-";
   std::string libfile = outpath + prefix + signature + ".so";
-  std::cout << "LoadLibrary " << libfile << std::endl;
   // load dynamic library
   void* dynlib = dlopen(libfile.c_str(), RTLD_LAZY);
   if (!dynlib) {
@@ -248,6 +259,7 @@ arrow::Status LoadLibrary(std::string signature, arrow::compute::FunctionContext
   // loading symbol from library and assign to pointer
   // (to be cast to function pointer later)
 
+  std::cout << "LoadLibrary " << libfile << std::endl;
   void (*MakeCodeGen)(arrow::compute::FunctionContext * ctx,
                       std::shared_ptr<CodeGenBase> * out);
   *(void**)(&MakeCodeGen) = dlsym(dynlib, "MakeCodeGen");

@@ -30,7 +30,7 @@ namespace extra {
 
 std::string BaseCodes();
 
-int FileSpinLock(std::string path);
+int FileSpinLock();
 
 void FileSpinUnLock(int fd);
 
