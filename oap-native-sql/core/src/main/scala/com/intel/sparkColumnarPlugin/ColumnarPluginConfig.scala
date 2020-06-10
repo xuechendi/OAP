@@ -22,6 +22,8 @@ import org.apache.spark.SparkConf
 class ColumnarPluginConfig(conf: SparkConf) {
   val enableColumnarSort: Boolean =
     conf.getBoolean("spark.sql.columnar.sort", defaultValue = false)
+  val batchSize: Int =
+    conf.getInt("spark.sql.execution.arrow.maxRecordsPerBatch", defaultValue = 10000)
 }
 
 object ColumnarPluginConfig {
@@ -39,6 +41,13 @@ object ColumnarPluginConfig {
       throw new IllegalStateException("ColumnarPluginConfig is not initialized yet")
     } else {
       ins
+    }
+  }
+  def getBatchSize: Int = synchronized {
+    if (ins == null) {
+      10000
+    } else {
+      ins.batchSize
     }
   }
 }
