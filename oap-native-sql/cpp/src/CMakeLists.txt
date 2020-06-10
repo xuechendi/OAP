@@ -133,8 +133,8 @@ endif()
 
 if(BENCHMARKS)
   find_package(GTest)
-  #add_definitions(-DBENCHMARK_FILE_PATH=${CMAKE_CURRENT_SOURCE_DIR}/benchmarks/source_files/)
-  add_compile_definitions(BENCHMARK_FILE_PATH="file://${CMAKE_CURRENT_SOURCE_DIR}/benchmarks/source_files/")
+  add_definitions(-DBENCHMARK_FILE_PATH="file://${CMAKE_CURRENT_SOURCE_DIR}/benchmarks/source_files/")
+  #add_compile_definitions(BENCHMARK_FILE_PATH="file://${CMAKE_CURRENT_SOURCE_DIR}/benchmarks/source_files/")
 macro(package_add_benchmark TESTNAME)
   #configure_file(${ARGN}.in ${ARGN})
   add_executable(${TESTNAME} ${ARGN})
@@ -181,7 +181,7 @@ file(COPY codegen/arrow_compute/ext/code_generator_base.h DESTINATION ${root_dir
 file(COPY codegen/arrow_compute/ext/kernels_ext.h DESTINATION ${root_directory}/releases/include/codegen/arrow_compute/ext/)
 file(COPY codegen/common/result_iterator.h DESTINATION ${root_directory}/releases/include/codegen/common/)
 
-add_compile_definitions(NATIVESQL_SRC_PATH="${root_directory}/releases")
+add_definitions(-DNATIVESQL_SRC_PATH="${root_directory}/releases")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-deprecated-declarations")
 set(SPARK_COLUMNAR_PLUGIN_SRCS
         jni/jni_wrapper.cc
