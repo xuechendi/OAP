@@ -239,10 +239,10 @@ arrow::Status CompileCodes(std::string codes, std::string signature) {
     arrow_lib2 = " -L" + std::string(env_arrow_dir) + "/lib ";
   }
   // compile the code
-  std::string cmd = env_gcc + " -std=c++14 -Wno-deprecated-declarations " + arrow_header +
-                    arrow_lib + arrow_lib2 + nativesql_header + nativesql_lib + cppfile + " -o " +
-                    libfile + " -O3 -march=native -shared -fPIC -larrow -lspark_columnar_jni 2> " +
-                    logfile;
+  std::string cmd =
+      env_gcc + " -std=c++14 -Wno-deprecated-declarations " + arrow_header + arrow_lib +
+      arrow_lib2 + nativesql_header + nativesql_lib + cppfile + " -o " + libfile +
+      " -O3 -march=native -shared -fPIC -larrow -lspark_columnar_jni 2> " + logfile;
   //#ifdef DEBUG
   std::cout << cmd << std::endl;
   //#endif
