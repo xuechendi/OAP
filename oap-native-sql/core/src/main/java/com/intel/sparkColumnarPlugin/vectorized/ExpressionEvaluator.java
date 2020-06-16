@@ -17,6 +17,7 @@
 
 package com.intel.sparkColumnarPlugin.vectorized;
 
+import com.intel.sparkColumnarPlugin.ColumnarPluginConfig;
 import io.netty.buffer.ArrowBuf;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -40,6 +41,7 @@ public class ExpressionEvaluator implements AutoCloseable {
   public ExpressionEvaluator() throws IOException {
     jniWrapper = new ExpressionEvaluatorJniWrapper();
     jniWrapper.nativeSetJavaTmpDir(System.getProperty("java.io.tmpdir"));
+    jniWrapper.nativeSetBatchSize(ColumnarPluginConfig.getBatchSize());
   }
 
   /** Convert ExpressionTree into native function. */

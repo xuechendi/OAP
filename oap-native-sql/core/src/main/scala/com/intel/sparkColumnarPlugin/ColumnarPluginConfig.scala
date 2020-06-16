@@ -25,6 +25,8 @@ class ColumnarPluginConfig(conf: SparkConf) {
   val enableColumnarShuffle: Boolean = conf
     .get("spark.shuffle.manager", "sort")
     .equals("org.apache.spark.shuffle.sort.ColumnarShuffleManager")
+  val batchSize: Int =
+    conf.getInt("spark.sql.execution.arrow.maxRecordsPerBatch", defaultValue = 10000)
 }
 
 object ColumnarPluginConfig {
@@ -42,6 +44,13 @@ object ColumnarPluginConfig {
       throw new IllegalStateException("ColumnarPluginConfig is not initialized yet")
     } else {
       ins
+    }
+  }
+  def getBatchSize: Int = synchronized {
+    if (ins == null) {
+      10000
+    } else {
+      ins.batchSize
     }
   }
 }
