@@ -27,6 +27,8 @@ class ColumnarPluginConfig(conf: SparkConf) {
     .equals("org.apache.spark.shuffle.sort.ColumnarShuffleManager")
   val batchSize: Int =
     conf.getInt("spark.sql.execution.arrow.maxRecordsPerBatch", defaultValue = 10000)
+  val tmpFile: String =
+    conf.getOption("spark.sql.columnar.tmp_dir").getOrElse(null)
 }
 
 object ColumnarPluginConfig {
@@ -51,6 +53,13 @@ object ColumnarPluginConfig {
       10000
     } else {
       ins.batchSize
+    }
+  }
+  def getTempFile: String = synchronized {
+    if (ins != null) {
+      ins.tmpFile
+    } else {
+      System.getProperty("java.io.tmpdir")
     }
   }
 }

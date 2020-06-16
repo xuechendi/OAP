@@ -39,8 +39,12 @@ public class ExpressionEvaluator implements AutoCloseable {
 
   /** Wrapper for native API. */
   public ExpressionEvaluator() throws IOException {
-    jniWrapper = new ExpressionEvaluatorJniWrapper();
-    jniWrapper.nativeSetJavaTmpDir(System.getProperty("java.io.tmpdir"));
+    String tmp_dir = ColumnarPluginConfig.getTempFile();
+    if (tmp_dir == null) {
+      tmp_dir = System.getProperty("java.io.tmpdir");
+    }
+    jniWrapper = new ExpressionEvaluatorJniWrapper(tmp_dir);
+    jniWrapper.nativeSetJavaTmpDir(tmp_dir);
     jniWrapper.nativeSetBatchSize(ColumnarPluginConfig.getBatchSize());
   }
 

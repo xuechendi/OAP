@@ -26,8 +26,8 @@ import java.io.IOException;
  */
 public class ExpressionEvaluatorJniWrapper {
   /** Wrapper for native API. */
-  public ExpressionEvaluatorJniWrapper() throws IOException {
-    JniUtils.getInstance();
+  public ExpressionEvaluatorJniWrapper(String tmp_dir) throws IOException {
+    JniUtils.getInstance(tmp_dir);
   }
 
   /**
