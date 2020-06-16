@@ -184,7 +184,7 @@ class SortArraysToIndicesKernel::Impl {
 
     std::string pre_sort_null_str = GetPreSortNull();
 
-    std::string sort_func_str = GetSortFunction();
+    std::string sort_func_str = GetSortFunction(key_index_list_);
 
     std::string make_result_iter_str =
         GetMakeResultIter(shuffle_typed_codegen_list.size());
@@ -208,6 +208,8 @@ class SortArraysToIndicesKernel::Impl {
     std::string typed_res_array_str = GetTypedResArray(shuffle_typed_codegen_list.size());
 
     return BaseCodes() + R"(
+#include "third_party/ska_sort.hpp"
+
 class TypedSorterImpl : public CodeGenBase {
  public:
   TypedSorterImpl(arrow::compute::FunctionContext* ctx) : ctx_(ctx) {}
@@ -402,14 +404,40 @@ extern "C" void MakeCodeGen(arrow::compute::FunctionContext* ctx,
     (indices_end - nulls_total_ + indices_null)->id = i;)";
     }
   }
-  std::string GetSortFunction() {
-    if (nulls_first_) {
-      return "std::sort(indices_begin + nulls_total_, indices_begin + "
-             "items_total_, "
-             "comp);";
+  std::string GetSortFunction(std::vector<int>& key_index_list) {
+    if (asc_) {
+      if (key_index_list.size() == 1) {
+        if (nulls_first_) {
+          return "ska_sort(indices_begin + nulls_total_, indices_begin + "
+                 "items_total_, "
+                 "[this](auto& x) -> decltype(auto){ return cached_" +
+                 std::to_string(key_index_list[0]) + "_[x.array_id]->GetView(x.id); });";
+        } else {
+          return "ska_sort(indices_begin, indices_begin + items_total_ - "
+                 "nulls_total_, "
+                 "[this](auto& x) -> decltype(auto){ return cached_" +
+                 std::to_string(key_index_list[0]) + "_[x.array_id]->GetView(x.id); });";
+        }
+
+      } else {
+        if (nulls_first_) {
+          return "std::sort(indices_begin + nulls_total_, indices_begin + "
+                 "items_total_, "
+                 "comp);";
+        } else {
+          return "std::sort(indices_begin, indices_begin + items_total_ - "
+                 "nulls_total_, comp);";
+        }
+      }
     } else {
-      return "std::sort(indices_begin, indices_begin + items_total_ - "
-             "nulls_total_, comp);";
+      if (nulls_first_) {
+        return "std::sort(indices_begin + nulls_total_, indices_begin + "
+               "items_total_, "
+               "comp);";
+      } else {
+        return "std::sort(indices_begin, indices_begin + items_total_ - "
+               "nulls_total_, comp);";
+      }
     }
   }
   std::string GetMakeResultIter(int shuffle_size) {
@@ -749,12 +777,22 @@ extern "C" void MakeCodeGen(arrow::compute::FunctionContext* ctx,
     }
   }
   std::string GetSortFunction() {
-    if (nulls_first_) {
-      return "ska_sort(indices_begin + nulls_total_, indices_begin + "
-             "items_total_);";
+    if (asc_) {
+      if (nulls_first_) {
+        return "ska_sort(indices_begin + nulls_total_, indices_begin + "
+               "items_total_);";
+      } else {
+        return "ska_sort(indices_begin, indices_begin + items_total_ - "
+               "nulls_total_);";
+      }
     } else {
-      return "ska_sort(indices_begin, indices_begin + items_total_ - "
-             "nulls_total_);";
+      if (nulls_first_) {
+        return "std::sort(indices_begin + nulls_total_, indices_begin + "
+               "items_total_, comp);";
+      } else {
+        return "std::sort(indices_begin, indices_begin + items_total_ - "
+               "nulls_total_, comp);";
+      }
     }
   }
   std::string GetMakeResultIter(int shuffle_size) {
