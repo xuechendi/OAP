@@ -299,8 +299,7 @@ class EncodeVisitorImpl : public ExprVisitorImpl {
 
     // create a new kernel to memcpy all keys as one binary array
     if (type_list.size() > 1) {
-      RETURN_NOT_OK(
-          extra::HashAggrArrayKernel::Make(&p_->ctx_, type_list, &concat_kernel_));
+      RETURN_NOT_OK(extra::HashArrayKernel::Make(&p_->ctx_, type_list, &concat_kernel_));
     }
 
     auto result_field = field("res", arrow::uint32());

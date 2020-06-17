@@ -112,12 +112,12 @@ class EncodeArrayKernel : public KernalBase {
   arrow::compute::FunctionContext* ctx_;
 };
 
-class HashAggrArrayKernel : public KernalBase {
+class HashArrayKernel : public KernalBase {
  public:
   static arrow::Status Make(arrow::compute::FunctionContext* ctx,
                             std::vector<std::shared_ptr<arrow::DataType>> type_list,
                             std::shared_ptr<KernalBase>* out);
-  HashAggrArrayKernel(arrow::compute::FunctionContext* ctx,
+  HashArrayKernel(arrow::compute::FunctionContext* ctx,
                       std::vector<std::shared_ptr<arrow::DataType>> type_list);
   arrow::Status Evaluate(const ArrayList& in,
                          std::shared_ptr<arrow::Array>* out) override;
