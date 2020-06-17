@@ -48,7 +48,7 @@
 #include "codegen/arrow_compute/ext/actions_impl.h"
 #include "codegen/arrow_compute/ext/array_item_index.h"
 #include "codegen/arrow_compute/ext/codegen_common.h"
-#include "codegen/arrow_compute/ext/codegen_node_visitor.h"
+//#include "codegen/arrow_compute/ext/codegen_node_visitor.h"
 #include "third_party/arrow/utils/hashing.h"
 #include "utils/macros.h"
 

@@ -102,38 +102,7 @@ class ConditionedProbeArraysKernel::Impl {
   arrow::compute::FunctionContext* ctx_;
   std::shared_ptr<CodeGenBase> prober_;
 
-  arrow::Status GetIndexList(
-      const std::vector<std::shared_ptr<arrow::Field>>& target_list,
-      const std::vector<std::shared_ptr<arrow::Field>>& source_list,
-      std::vector<int>* out) {
-    for (auto key_field : target_list) {
-      int i = 0;
-      for (auto field : source_list) {
-        if (key_field->name() == field->name()) {
-          break;
-        }
-        i++;
-      }
-      (*out).push_back(i);
-    }
-    return arrow::Status::OK();
-  }
-
-  arrow::Status GetIndexListFromSchema(
-      const std::shared_ptr<arrow::Schema>& result_schema,
-      const std::vector<std::shared_ptr<arrow::Field>>& field_list,
-      std::vector<int>* index_list) {
-    int i = 0;
-    for (auto field : field_list) {
-      auto indices = result_schema->GetAllFieldIndices(field->name());
-      if (indices.size() == 1) {
-        (*index_list).push_back(i);
-      }
-      i++;
-    }
-    return arrow::Status::OK();
-  }
-
+  
   arrow::Status GetResultIndexList(
       const std::shared_ptr<arrow::Schema>& result_schema,
       const std::vector<std::shared_ptr<arrow::Field>>& left_field_list,
