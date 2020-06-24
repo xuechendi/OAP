@@ -58,6 +58,14 @@
         </dependency> 
     </dependencies>
     <build>
+      <resources>
+        <resource>
+          <directory>../native/src/</directory>
+          <includes>
+            <include>**/libjnipmdk.so</include>
+          </includes>
+        </resource>
+      </resources>
         <plugins>
             <plugin>
                 <groupId>net.alchim31.maven</groupId>
