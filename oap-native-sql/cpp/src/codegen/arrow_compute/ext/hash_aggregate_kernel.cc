@@ -144,8 +144,8 @@ class HashAggregateKernel::Impl {
     for (auto func_node : action_list_) {
       std::shared_ptr<CodeGenNodeVisitor> codegen_visitor;
       std::shared_ptr<ActionCodeGen> action_codegen;
-      MakeCodeGenNodeVisitor(func_node, input_field_list_, &action_codegen,
-                             &codegen_visitor);
+      RETURN_NOT_OK(MakeCodeGenNodeVisitor(func_node, input_field_list_, &action_codegen,
+                                           &codegen_visitor));
       action_impl_list_.push_back(action_codegen);
       if (action_codegen->IsPreProjected()) {
         auto expr = action_codegen->GetProjectorExpr();
@@ -257,7 +257,8 @@ class HashAggregateKernel::Impl {
 
     bool multiple_cols = (key_list_.size() > 1);
     std::string concat_kernel;
-    std::string hash_map_type_str = "SparseHashMap";
+    // std::string hash_map_type_str = "SparseHashMap";
+    std::string hash_map_type_str = "arrow::internal::ScalarMemoTable";
     std::string evaluate_get_typed_key_array_str;
     std::string evaluate_get_typed_key_method_str;
     std::string key_ctype_str =

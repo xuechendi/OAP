@@ -63,6 +63,7 @@ class CodeGenNodeVisitor : public VisitorBase {
   }
 
   arrow::Status ProduceCodes(std::shared_ptr<ActionCodeGen>* action_codegen) {
+    std::cout << "ProduceCodes of func " << func_->ToString() << std::endl;
     action_impl_->ProduceCodes(action_codegen);
     return arrow::Status::OK();
   }
@@ -102,6 +103,7 @@ static arrow::Status MakeCodeGenNodeVisitor(
     std::shared_ptr<TypedActionCodeGenImpl> action_impl,
     std::shared_ptr<CodeGenNodeVisitor>* out) {
   auto visitor = std::make_shared<CodeGenNodeVisitor>(func, field_list, action_impl);
+  std::cout << func->ToString() << std::endl;
   RETURN_NOT_OK(visitor->Eval());
   *out = visitor;
   return arrow::Status::OK();

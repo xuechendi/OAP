@@ -73,33 +73,46 @@ class TypedActionCodeGenImpl {
   }
   std::string GetActionName() { return action_name_; }
   arrow::Status ProduceCodes(std::shared_ptr<ActionCodeGen>* action_codegen) {
+    std::cout << "ProducesCodes name is " << action_name_ << std::endl;
     if (action_name_.compare("action_sum_count") == 0) {
-      assert(!input_index_list_.empty());
+      std::string name;
+      if (!input_index_list_.empty()) {
+        name = std::to_string(input_index_list_[0]);
+      }
       *action_codegen = std::make_shared<SumCountActionCodeGen>(
-          std::to_string(input_index_list_[0]), child_list_, input_list_,
-          input_fields_list_, codes_ss_.str(), named_projector_);
+          name, child_list_, input_list_, input_fields_list_, codes_ss_.str(),
+          named_projector_);
 
     } else if (action_name_.find("action_groupby") != std::string::npos) {
-      assert(!input_index_list_.empty());
+      std::string name;
+      if (!input_index_list_.empty()) {
+        name = std::to_string(input_index_list_[0]);
+      }
       bool keep = true;
       if (action_name_.size() > 14) {
         keep = false;
       }
       *action_codegen = std::make_shared<GroupByActionCodeGen>(
-          std::to_string(input_index_list_[0]), keep, child_list_, input_list_,
-          input_fields_list_, codes_ss_.str(), named_projector_);
+          name, keep, child_list_, input_list_, input_fields_list_, codes_ss_.str(),
+          named_projector_);
 
     } else if (action_name_.compare("action_sum") == 0) {
-      assert(!input_index_list_.empty());
+      std::string name;
+      if (!input_index_list_.empty()) {
+        name = std::to_string(input_index_list_[0]);
+      }
       *action_codegen = std::make_shared<SumActionCodeGen>(
-          std::to_string(input_index_list_[0]), child_list_, input_list_,
-          input_fields_list_, codes_ss_.str(), named_projector_);
+          name, child_list_, input_list_, input_fields_list_, codes_ss_.str(),
+          named_projector_);
 
     } else if (action_name_.compare("action_count") == 0) {
-      assert(!input_index_list_.empty());
+      std::string name;
+      if (!input_index_list_.empty()) {
+        name = std::to_string(input_index_list_[0]);
+      }
       *action_codegen = std::make_shared<CountActionCodeGen>(
-          std::to_string(input_index_list_[0]), child_list_, input_list_,
-          input_fields_list_, codes_ss_.str(), named_projector_);
+          name, child_list_, input_list_, input_fields_list_, codes_ss_.str(),
+          named_projector_);
 
     } else if (action_name_.compare(0, 20, "action_countLiteral_") == 0) {
       auto lit = std::stoi(action_name_.substr(20));
@@ -108,30 +121,41 @@ class TypedActionCodeGenImpl {
           input_fields_list_, codes_ss_.str(), named_projector_);
 
     } else if (action_name_.compare("action_avg") == 0) {
-      assert(!input_index_list_.empty());
+      std::string name;
+      if (!input_index_list_.empty()) {
+        name = std::to_string(input_index_list_[0]);
+      }
       *action_codegen = std::make_shared<AvgActionCodeGen>(
-          std::to_string(input_index_list_[0]), child_list_, input_list_,
-          input_fields_list_, codes_ss_.str(), named_projector_);
+          name, child_list_, input_list_, input_fields_list_, codes_ss_.str(),
+          named_projector_);
 
     } else if (action_name_.compare("action_avgByCount") == 0) {
-      assert(!input_index_list_.empty());
+      std::string name;
+      if (input_index_list_.size() == 2) {
+        name = std::to_string(input_index_list_[0]) + "_" +
+               std::to_string(input_index_list_[1]);
+      }
       *action_codegen = std::make_shared<AvgByCountActionCodeGen>(
-          std::to_string(input_index_list_[0]) + "_" +
-              std::to_string(input_index_list_[1]),
-          child_list_, input_list_, input_fields_list_, codes_ss_.str(),
+          name, child_list_, input_list_, input_fields_list_, codes_ss_.str(),
           named_projector_);
 
     } else if (action_name_.compare("action_min") == 0) {
-      assert(!input_index_list_.empty());
+      std::string name;
+      if (!input_index_list_.empty()) {
+        name = std::to_string(input_index_list_[0]);
+      }
       *action_codegen = std::make_shared<MinActionCodeGen>(
-          std::to_string(input_index_list_[0]), child_list_, input_list_,
-          input_fields_list_, codes_ss_.str(), named_projector_);
+          name, child_list_, input_list_, input_fields_list_, codes_ss_.str(),
+          named_projector_);
 
     } else if (action_name_.compare("action_max") == 0) {
-      assert(!input_index_list_.empty());
+      std::string name;
+      if (!input_index_list_.empty()) {
+        name = std::to_string(input_index_list_[0]);
+      }
       *action_codegen = std::make_shared<MaxActionCodeGen>(
-          std::to_string(input_index_list_[0]), child_list_, input_list_,
-          input_fields_list_, codes_ss_.str(), named_projector_);
+          name, child_list_, input_list_, input_fields_list_, codes_ss_.str(),
+          named_projector_);
     } else {
       std::cout << "action_name " << action_name_ << " is unrecognized" << std::endl;
       return arrow::Status::Invalid("Invalid action_name ", action_name_);

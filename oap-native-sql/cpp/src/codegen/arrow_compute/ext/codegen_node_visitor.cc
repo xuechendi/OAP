@@ -47,39 +47,41 @@ arrow::Status CodeGenNodeVisitor::Visit(const gandiva::FunctionNode& node) {
 
   auto func_name = node.descriptor()->name();
   std::stringstream ss;
-  if (func_name.compare("less_than") == 0) {
-    ss << "(" << child_visitor_list[0]->GetResult() << " < "
-       << child_visitor_list[1]->GetResult() << ")";
-  } else if (func_name.compare("greater_than") == 0) {
-    ss << "(" << child_visitor_list[0]->GetResult() << " > "
-       << child_visitor_list[1]->GetResult() << ")";
-  } else if (func_name.compare("less_than_or_equal_to") == 0) {
-    ss << "(" << child_visitor_list[0]->GetResult()
-       << " <= " << child_visitor_list[1]->GetResult() << ")";
-  } else if (func_name.compare("greater_than_or_equal_to") == 0) {
-    ss << "(" << child_visitor_list[0]->GetResult()
-       << " >= " << child_visitor_list[1]->GetResult() << ")";
-  } else if (func_name.compare("equal") == 0) {
-    ss << "(" << child_visitor_list[0]->GetResult()
-       << " == " << child_visitor_list[1]->GetResult() << ")";
-  } else if (func_name.compare("not") == 0) {
-    ss << "!(" << child_visitor_list[0]->GetResult() << ")";
-  } else if (func_name.compare(0, 7, "action_") == 0) {
-    action_impl_->SetActionName(func_name);
-    std::vector<std::string> child_res;
-    for (auto child : child_visitor_list) {
-      child_res.push_back(child->GetResult());
-    }
-    action_impl_->SetChildList(child_res);
-    std::vector<std::string> input_list;
-    for (auto child : child_visitor_list) {
-      input_list.push_back(child->GetInput());
-    }
-    action_impl_->SetInputList(input_list);
-  } else {
-    if (action_impl_) {
+  if (action_impl_) {
+    if (func_name.compare(0, 7, "action_") == 0) {
+      action_impl_->SetActionName(func_name);
+      std::vector<std::string> child_res;
+      for (auto child : child_visitor_list) {
+        child_res.push_back(child->GetResult());
+      }
+      action_impl_->SetChildList(child_res);
+      std::vector<std::string> input_list;
+      for (auto child : child_visitor_list) {
+        input_list.push_back(child->GetInput());
+      }
+      action_impl_->SetInputList(input_list);
+    } else {
       // do projection when matches none.
       RETURN_NOT_OK(action_impl_->MakeGandivaProjection(func_, field_list_v_[0]));
+    }
+  } else {
+    if (func_name.compare("less_than") == 0) {
+      ss << "(" << child_visitor_list[0]->GetResult() << " < "
+         << child_visitor_list[1]->GetResult() << ")";
+    } else if (func_name.compare("greater_than") == 0) {
+      ss << "(" << child_visitor_list[0]->GetResult() << " > "
+         << child_visitor_list[1]->GetResult() << ")";
+    } else if (func_name.compare("less_than_or_equal_to") == 0) {
+      ss << "(" << child_visitor_list[0]->GetResult()
+         << " <= " << child_visitor_list[1]->GetResult() << ")";
+    } else if (func_name.compare("greater_than_or_equal_to") == 0) {
+      ss << "(" << child_visitor_list[0]->GetResult()
+         << " >= " << child_visitor_list[1]->GetResult() << ")";
+    } else if (func_name.compare("equal") == 0) {
+      ss << "(" << child_visitor_list[0]->GetResult()
+         << " == " << child_visitor_list[1]->GetResult() << ")";
+    } else if (func_name.compare("not") == 0) {
+      ss << "!(" << child_visitor_list[0]->GetResult() << ")";
     } else {
       ss << child_visitor_list[0]->GetResult();
     }
@@ -147,6 +149,9 @@ arrow::Status CodeGenNodeVisitor::Visit(const gandiva::FieldNode& node) {
 }
 
 arrow::Status CodeGenNodeVisitor::Visit(const gandiva::IfNode& node) {
+  if (action_impl_) {
+    RETURN_NOT_OK(action_impl_->MakeGandivaProjection(func_, field_list_v_[0]));
+  }
   return arrow::Status::OK();
 }
 

@@ -114,8 +114,7 @@ std::string GetCTypeString(std::shared_ptr<arrow::DataType> type) {
     case arrow::DoubleType::type_id:
       return "double";
     case arrow::Date32Type::type_id:
-      std::cout << "Can't handle Data32Type yet" << std::endl;
-      throw;
+      return "int32_t";
     case arrow::StringType::type_id:
       return "std::string";
     default:
