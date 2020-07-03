@@ -73,7 +73,6 @@ class TypedActionCodeGenImpl {
   }
   std::string GetActionName() { return action_name_; }
   arrow::Status ProduceCodes(std::shared_ptr<ActionCodeGen>* action_codegen) {
-    std::cout << "ProducesCodes name is " << action_name_ << std::endl;
     if (action_name_.compare("action_sum_count") == 0) {
       std::string name;
       if (!input_index_list_.empty()) {
