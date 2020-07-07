@@ -383,7 +383,7 @@ class SortArraysToIndicesVisitorImpl : public ExprVisitorImpl {
           col_list.push_back(col);
         }
         RETURN_NOT_OK(kernel_->Evaluate(col_list));
-        finish_return_type_ = ArrowComputeResultType::Batch;
+        finish_return_type_ = ArrowComputeResultType::BatchIterator;
       } break;
       default:
         return arrow::Status::NotImplemented(
@@ -396,7 +396,7 @@ class SortArraysToIndicesVisitorImpl : public ExprVisitorImpl {
       std::shared_ptr<arrow::Schema> schema,
       std::shared_ptr<ResultIterator<arrow::RecordBatch>>* out) override {
     switch (finish_return_type_) {
-      case ArrowComputeResultType::Batch: {
+      case ArrowComputeResultType::BatchIterator: {
         TIME_MICRO_OR_RAISE(p_->elapse_time_, kernel_->MakeResultIterator(schema, out));
         p_->return_type_ = ArrowComputeResultType::BatchIterator;
       } break;

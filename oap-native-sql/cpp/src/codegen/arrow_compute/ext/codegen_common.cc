@@ -35,28 +35,12 @@ namespace extra {
 
 std::string BaseCodes() {
   return R"(
-#include <arrow/array.h>
-#include <arrow/array/builder_binary.h>
-#include <arrow/array/builder_primitive.h>
-#include <arrow/buffer.h>
-#include <arrow/builder.h>
 #include <arrow/compute/context.h>
 #include <arrow/record_batch.h>
-#include <arrow/type.h>
-#include <arrow/type_traits.h>
 
-#include <algorithm>
-#include <iostream>
-
-#include "codegen/arrow_compute/ext/array_item_index.h"
 #include "codegen/arrow_compute/ext/code_generator_base.h"
-#include "codegen/arrow_compute/ext/kernels_ext.h"
-#include "codegen/common/result_iterator.h"
-#include "sparsehash/sparse_hash_map.h"
-#include "third_party/arrow/utils/hashing.h"
-
+#include "precompile/array.h"
 using namespace sparkcolumnarplugin::codegen::arrowcompute::extra;
-
 )";
 }
 
@@ -160,10 +144,34 @@ std::string GetTypeString(std::shared_ptr<arrow::DataType> type, std::string tai
   }
 }
 
-std::string GetTypedArrayDefineString(std::shared_ptr<arrow::DataType> type,
-                                      std::string name) {
-  return "std::vector<std::shared_ptr<arrow::" + GetTypeString(type, "Array") + ">> " +
-         name + ";\n";
+gandiva::ExpressionPtr GetConcatedKernel(
+    std::vector<std::shared_ptr<arrow::Field>> key_list) {
+  int index = 0;
+  std::vector<std::shared_ptr<gandiva::Node>> func_node_list = {};
+  std::vector<std::shared_ptr<arrow::Field>> field_list = {};
+  for (auto key : key_list) {
+    auto type = key->type();
+    auto name = key->name();
+    auto field = arrow::field(name, type);
+    field_list.push_back(field);
+    auto field_node = gandiva::TreeExprBuilder::MakeField(field);
+    auto func_node =
+        gandiva::TreeExprBuilder::MakeFunction("hash32", {field_node}, arrow::int32());
+    func_node_list.push_back(func_node);
+    if (func_node_list.size() == 2) {
+      auto shift_func_node = gandiva::TreeExprBuilder::MakeFunction(
+          "multiply",
+          {func_node_list[0], gandiva::TreeExprBuilder::MakeLiteral((int32_t)10)},
+          arrow::int32());
+      auto tmp_func_node = gandiva::TreeExprBuilder::MakeFunction(
+          "add", {shift_func_node, func_node_list[1]}, arrow::int32());
+      func_node_list.clear();
+      func_node_list.push_back(tmp_func_node);
+    }
+    index++;
+  }
+  return gandiva::TreeExprBuilder::MakeExpression(
+      func_node_list[0], arrow::field("projection_key", arrow::int32()));
 }
 
 arrow::Status GetIndexList(const std::vector<std::shared_ptr<arrow::Field>>& target_list,
@@ -241,7 +249,7 @@ void FileSpinUnLock(int fd) {
 arrow::Status CompileCodes(std::string codes, std::string signature) {
   // temporary cpp/library output files
   srand(time(NULL));
-  std::string outpath = GetTempPath() + "/tmp/";
+  std::string outpath = GetTempPath() + "/tmp";
   mkdir(outpath.c_str(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
   std::string prefix = "/spark-columnar-plugin-codegen-";
   std::string cppfile = outpath + prefix + signature + ".cc";
@@ -285,8 +293,7 @@ arrow::Status CompileCodes(std::string codes, std::string signature) {
   std::string cmd = env_gcc + " -std=c++14 -Wno-deprecated-declarations " + arrow_header +
                     arrow_lib + arrow_lib2 + nativesql_header + nativesql_header_2 +
                     nativesql_lib + cppfile + " -o " + libfile +
-                    " -O3 -march=native -shared -fPIC -larrow -lspark_columnar_jni 2> " +
-                    logfile;
+                    " -O3 -march=native -shared -fPIC -lspark_columnar_jni 2> " + logfile;
   //#ifdef DEBUG
   std::cout << cmd << std::endl;
   //#endif
@@ -309,21 +316,41 @@ arrow::Status CompileCodes(std::string codes, std::string signature) {
   return arrow::Status::OK();
 }
 
+std::string exec(const char* cmd) {
+  std::array<char, 128> buffer;
+  std::string result;
+  std::unique_ptr<FILE, decltype(&pclose)> pipe(popen(cmd, "r"), pclose);
+  if (!pipe) {
+    throw std::runtime_error("popen() failed!");
+  }
+  while (fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr) {
+    result += buffer.data();
+  }
+  return result;
+}
+
 arrow::Status LoadLibrary(std::string signature, arrow::compute::FunctionContext* ctx,
                           std::shared_ptr<CodeGenBase>* out) {
-  std::string outpath = GetTempPath() + "/tmp/";
+  std::string outpath = GetTempPath() + "/tmp";
   std::string prefix = "/spark-columnar-plugin-codegen-";
   std::string libfile = outpath + prefix + signature + ".so";
   // load dynamic library
   void* dynlib = dlopen(libfile.c_str(), RTLD_LAZY);
   if (!dynlib) {
-    return arrow::Status::Invalid(libfile, " is not generated");
+    std::stringstream ss;
+    ss << "LoadLibrary " << libfile
+       << " failed. \nCur dir has contents "
+          "as below."
+       << std::endl;
+    auto cmd = "ls -l " + GetTempPath() + ";";
+    ss << exec(cmd.c_str()) << std::endl;
+    return arrow::Status::Invalid(libfile,
+                                  " is not generated, failed msg as below: ", ss.str());
   }
 
   // loading symbol from library and assign to pointer
   // (to be cast to function pointer later)
 
-  std::cout << "LoadLibrary " << libfile << std::endl;
   void (*MakeCodeGen)(arrow::compute::FunctionContext * ctx,
                       std::shared_ptr<CodeGenBase> * out);
   *(void**)(&MakeCodeGen) = dlsym(dynlib, "MakeCodeGen");
