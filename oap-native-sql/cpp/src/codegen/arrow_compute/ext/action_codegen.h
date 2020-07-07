@@ -140,9 +140,8 @@ class ActionCodeGen {
     std::stringstream ss;
     auto cached_name = Replace(name, "[", "_");
     cached_name = "typed_" + Replace(cached_name, "]", "");
-    ss << "auto " << cached_name
-       << " = std::dynamic_pointer_cast<arrow::" << GetTypeString(type, "Array") << ">("
-       << name << ");";
+    ss << "auto " << cached_name << " = std::make_shared<" << GetTypeString(type, "Array")
+       << ">(" << name << ");";
     typed_input_and_prepare_list_.push_back(std::make_pair(cached_name, ss.str()));
   }
 
@@ -150,8 +149,7 @@ class ActionCodeGen {
                                      std::string name) {
     std::stringstream ss;
     auto cached_name = "typed_" + name;
-    ss << "auto " << cached_name
-       << " = std::dynamic_pointer_cast<arrow::" << GetTypeString(type, "Array")
+    ss << "auto " << cached_name << " = std::make_shared<" << GetTypeString(type, "Array")
        << ">(projected_batch->GetColumnByName(\"" << name << "\"));";
     typed_input_and_prepare_list_.push_back(std::make_pair(cached_name, ss.str()));
   }
@@ -163,8 +161,8 @@ class ActionCodeGen {
     auto builder_name = name + "_builder_";
     ss << "std::vector<" << GetCTypeString(type) << "> " << cache_name << ";"
        << std::endl;
-    ss << "std::shared_ptr<arrow::" << GetTypeString(type, "Builder") << "> "
-       << builder_name << ";" << std::endl;
+    ss << "std::shared_ptr<" << GetTypeString(type, "Builder") << "> " << builder_name
+       << ";" << std::endl;
     return ss.str();
   }
 
@@ -176,12 +174,8 @@ class ActionCodeGen {
     ss << cache_name << " = " << cache_name_tmp << ";" << std::endl;
     auto builder_name_tmp = name + "_builder";
     auto builder_name = name + "_builder_";
-    ss << "std::unique_ptr<arrow::ArrayBuilder> " << builder_name_tmp << ";" << std::endl;
-    ss << "arrow::MakeBuilder(ctx_->memory_pool(), arrow::" << GetArrowTypeDefString(type)
-       << ", &" << builder_name_tmp << ");" << std::endl;
-    ss << builder_name
-       << ".reset(arrow::internal::checked_cast<arrow::" << GetTypeString(type, "Builder")
-       << "*>(" << builder_name_tmp << ".release()));" << std::endl;
+    ss << builder_name << " = std::make_shared<" << GetTypeString(type, "Builder")
+       << ">(ctx_->memory_pool());" << std::endl;
     return ss.str();
   }
 
