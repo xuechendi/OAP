@@ -72,14 +72,28 @@ class ColumnarShuffledHashJoinExec(
 
   override def supportsColumnar = true
 
+  val numOutputRows = longMetric("numOutputRows")
+  val joinTime = longMetric("joinTime")
+  val buildTime = longMetric("buildTime")
+  val resultSchema = this.schema
+
   //TODO() Disable code generation
   //override def supportCodegen: Boolean = false
+  ColumnarShuffledHashJoin.prebuild(
+    leftKeys,
+    rightKeys,
+    resultSchema,
+    joinType,
+    buildSide,
+    condition,
+    left,
+    right,
+    buildTime,
+    joinTime,
+    numOutputRows,
+    sparkConf)
 
   override def doExecuteColumnar(): RDD[ColumnarBatch] = {
-    val numOutputRows = longMetric("numOutputRows")
-    val joinTime = longMetric("joinTime")
-    val buildTime = longMetric("buildTime")
-    val resultSchema = this.schema
     streamedPlan.executeColumnar().zipPartitions(buildPlan.executeColumnar()) {
       (streamIter, buildIter) =>
         //val hashed = buildHashedRelation(buildIter)
@@ -97,12 +111,12 @@ class ColumnarShuffledHashJoinExec(
           joinTime,
           numOutputRows,
           sparkConf)
-        val vjoinResult = vjoin.columnarInnerJoin(streamIter, buildIter)
         TaskContext
           .get()
           .addTaskCompletionListener[Unit](_ => {
             vjoin.close()
           })
+        val vjoinResult = vjoin.columnarJoin(streamIter, buildIter)
         new CloseableColumnBatchIterator(vjoinResult)
     }
   }

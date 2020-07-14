@@ -82,16 +82,34 @@ class ColumnarHashAggregateExec(
     "elapseTime" -> SQLMetrics
       .createTimingMetric(sparkContext, "elapse time from very begin to this process"))
 
-  override def doExecuteColumnar(): RDD[ColumnarBatch] = {
-    val numOutputRows = longMetric("numOutputRows")
-    val numOutputBatches = longMetric("numOutputBatches")
-    val numInputBatches = longMetric("numInputBatches")
-    val aggTime = longMetric("aggTime")
-    val elapseTime = longMetric("elapseTime")
-    numOutputRows.set(0)
-    numOutputBatches.set(0)
-    numInputBatches.set(0)
+  val numOutputRows = longMetric("numOutputRows")
+  val numOutputBatches = longMetric("numOutputBatches")
+  val numInputBatches = longMetric("numInputBatches")
+  val aggTime = longMetric("aggTime")
+  val elapseTime = longMetric("elapseTime")
+  numOutputRows.set(0)
+  numOutputBatches.set(0)
+  numInputBatches.set(0)
 
+  if (ColumnarPluginConfig
+        .getConf(sparkConf)
+        .enableCodegenHashAggregate && groupingExpressions.nonEmpty) {
+    ColumnarGroupbyHashAggregation.prebuild(
+      groupingExpressions,
+      child.output,
+      aggregateExpressions,
+      aggregateAttributes,
+      resultExpressions,
+      output,
+      numInputBatches,
+      numOutputBatches,
+      numOutputRows,
+      aggTime,
+      elapseTime,
+      sparkConf)
+  }
+
+  override def doExecuteColumnar(): RDD[ColumnarBatch] = {
     child.executeColumnar().mapPartitionsWithIndex { (partIndex, iter) =>
       val hasInput = iter.hasNext
       val res = if (!hasInput) {
@@ -102,21 +120,19 @@ class ColumnarHashAggregateExec(
         if (ColumnarPluginConfig
               .getConf(sparkConf)
               .enableCodegenHashAggregate && groupingExpressions.nonEmpty) {
-          val aggregation =
-            ColumnarGroupbyHashAggregation.create(
-              partIndex,
-              groupingExpressions,
-              child.output,
-              aggregateExpressions,
-              aggregateAttributes,
-              resultExpressions,
-              output,
-              numInputBatches,
-              numOutputBatches,
-              numOutputRows,
-              aggTime,
-              elapseTime,
-              sparkConf)
+          val aggregation = ColumnarGroupbyHashAggregation.create(
+            groupingExpressions,
+            child.output,
+            aggregateExpressions,
+            aggregateAttributes,
+            resultExpressions,
+            output,
+            numInputBatches,
+            numOutputBatches,
+            numOutputRows,
+            aggTime,
+            elapseTime,
+            sparkConf)
           TaskContext
             .get()
             .addTaskCompletionListener[Unit](_ => {
@@ -124,21 +140,20 @@ class ColumnarHashAggregateExec(
             })
           new CloseableColumnBatchIterator(aggregation.createIterator(iter))
         } else {
-          val aggregation =
-            ColumnarAggregation.create(
-              partIndex,
-              groupingExpressions,
-              child.output,
-              aggregateExpressions,
-              aggregateAttributes,
-              resultExpressions,
-              output,
-              numInputBatches,
-              numOutputBatches,
-              numOutputRows,
-              aggTime,
-              elapseTime,
-              sparkConf)
+          var aggregation = ColumnarAggregation.create(
+            partIndex,
+            groupingExpressions,
+            child.output,
+            aggregateExpressions,
+            aggregateAttributes,
+            resultExpressions,
+            output,
+            numInputBatches,
+            numOutputBatches,
+            numOutputRows,
+            aggTime,
+            elapseTime,
+            sparkConf)
           TaskContext
             .get()
             .addTaskCompletionListener[Unit](_ => {
