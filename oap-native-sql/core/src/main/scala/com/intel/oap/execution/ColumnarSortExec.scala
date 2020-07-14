@@ -55,12 +55,24 @@ class ColumnarSortExec(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
     "numOutputBatches" -> SQLMetrics.createMetric(sparkContext, "number of output batches"))
 
+  val elapse = longMetric("totalSortTime")
+  val sortTime = longMetric("sortTime")
+  val shuffleTime = longMetric("shuffleTime")
+  val numOutputRows = longMetric("numOutputRows")
+  val numOutputBatches = longMetric("numOutputBatches")
+
+  ColumnarSorter.prebuild(
+    sortOrder,
+    true,
+    child.output,
+    sortTime,
+    numOutputBatches,
+    numOutputRows,
+    shuffleTime,
+    elapse,
+    sparkConf)
+
   override def doExecuteColumnar(): RDD[ColumnarBatch] = {
-    val elapse = longMetric("totalSortTime")
-    val sortTime = longMetric("sortTime")
-    val shuffleTime = longMetric("shuffleTime")
-    val numOutputRows = longMetric("numOutputRows")
-    val numOutputBatches = longMetric("numOutputBatches")
     child.executeColumnar().mapPartitions { iter =>
       val hasInput = iter.hasNext
       val res = if (!hasInput) {
