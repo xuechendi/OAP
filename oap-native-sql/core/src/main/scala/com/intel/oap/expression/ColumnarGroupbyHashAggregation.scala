@@ -31,7 +31,7 @@ import com.intel.oap.vectorized.BatchIterator
 
 import com.google.common.collect.Lists
 import org.apache.hadoop.mapreduce.TaskAttemptID
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
@@ -496,6 +496,7 @@ object ColumnarGroupbyHashAggregation extends Logging {
       aggregateAttributes: Seq[Attribute],
       resultExpressions: Seq[NamedExpression],
       output: Seq[Attribute],
+      listJars: Seq[String],
       numInputBatches: SQLMetric,
       numOutputBatches: SQLMetric,
       numOutputRows: SQLMetric,
@@ -515,7 +516,7 @@ object ColumnarGroupbyHashAggregation extends Logging {
       aggrTime,
       elapseTime,
       sparkConf)
-    aggregator = new ExpressionEvaluator()
+    aggregator = new ExpressionEvaluator(listJars.toList.asJava)
     aggregator.build(
       originalInputArrowSchema,
       Lists.newArrayList(nativeExpressionNode),

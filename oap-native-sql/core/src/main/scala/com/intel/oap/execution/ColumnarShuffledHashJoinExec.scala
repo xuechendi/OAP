@@ -20,9 +20,11 @@ package com.intel.oap.execution
 import java.util.concurrent.TimeUnit._
 
 import com.intel.oap.vectorized._
+import com.intel.oap.ColumnarPluginConfig
 
 import org.apache.spark.TaskContext
 import org.apache.spark.rdd.RDD
+import org.apache.spark.util.{Utils, UserAddedJarUtils}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.expressions.codegen._
@@ -65,6 +67,16 @@ class ColumnarShuffledHashJoinExec(
     extends ShuffledHashJoinExec(leftKeys, rightKeys, joinType, buildSide, condition, left, right) {
 
   val sparkConf = sparkContext.getConf
+  val tempDir = ColumnarPluginConfig.getTempFile
+  val listJars = sparkContext.listJars
+  val jarList = listJars.map(jarUrl => {
+    UserAddedJarUtils.fetchJarFromSpark(
+      jarUrl,
+      tempDir,
+      "spark-columnar-plugin-codegen-precompile.jar",
+      sparkConf)
+    s"${tempDir}/spark-columnar-plugin-codegen-precompile.jar"
+  })
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
     "joinTime" -> SQLMetrics.createTimingMetric(sparkContext, "join time"),
@@ -107,6 +119,7 @@ class ColumnarShuffledHashJoinExec(
           condition,
           left,
           right,
+          jarList,
           buildTime,
           joinTime,
           numOutputRows,

@@ -35,7 +35,7 @@ import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.joins.{BuildLeft, BuildRight, BuildSide}
 
 import scala.collection.JavaConverters._
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
 import scala.collection.mutable.ListBuffer
@@ -402,6 +402,7 @@ object ColumnarShuffledHashJoin extends Logging {
       condition: Option[Expression],
       left: SparkPlan,
       right: SparkPlan,
+      listJars: Seq[String],
       buildTime: SQLMetric,
       joinTime: SQLMetric,
       numOutputRows: SQLMetric,
@@ -420,7 +421,7 @@ object ColumnarShuffledHashJoin extends Logging {
       numOutputRows,
       sparkConf)
 
-    prober = new ExpressionEvaluator()
+    prober = new ExpressionEvaluator(listJars.toList.asJava)
     prober.build(
       build_input_arrow_schema,
       Lists.newArrayList(condition_probe_expr),

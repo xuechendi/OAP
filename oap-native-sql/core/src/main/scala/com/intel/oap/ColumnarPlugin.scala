@@ -145,7 +145,11 @@ case class ColumnarOverrideRules(session: SparkSession) extends ColumnarRule wit
 
   override def postColumnarTransitions: Rule[SparkPlan] = plan => {
     if (columnarEnabled) {
-      postOverrides(plan)
+      val out_plan = postOverrides(plan)
+      session.sparkContext.addJar(
+        "/tmp/nativesql/tmp/spark-columnar-plugin-codegen-precompile.jar")
+      logWarning(s"current jars are ${session.sparkContext.listJars}")
+      out_plan
     } else {
       plan
     }

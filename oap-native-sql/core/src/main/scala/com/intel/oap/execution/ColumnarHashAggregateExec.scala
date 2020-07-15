@@ -69,6 +69,7 @@ class ColumnarHashAggregateExec(
       child) {
 
   val sparkConf = sparkContext.getConf
+  val listJars = sparkContext.listJars
   override def supportsColumnar = true
 
   // Disable code generation
@@ -127,6 +128,7 @@ class ColumnarHashAggregateExec(
             aggregateAttributes,
             resultExpressions,
             output,
+            listJars,
             numInputBatches,
             numOutputBatches,
             numOutputRows,

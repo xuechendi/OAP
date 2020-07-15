@@ -42,6 +42,7 @@ class ColumnarSortExec(
     extends SortExec(sortOrder, global, child, testSpillFrequency) {
 
   val sparkConf = sparkContext.getConf
+  val listJars = sparkContext.listJars
   override def supportsColumnar = true
 
   // Disable code generation
@@ -82,6 +83,7 @@ class ColumnarSortExec(
           sortOrder,
           true,
           child.output,
+          listJars,
           sortTime,
           numOutputBatches,
           numOutputRows,
