@@ -6,10 +6,10 @@ CURRENT_DIR=$(cd "$(dirname "$BASH_SOURCE")"; pwd)
 echo $CURRENT_DIR
 
 cd ${CURRENT_DIR}
-if [ -d build ]; then
-    rm -r build
-fi
-mkdir build
+#if [ -d build ]; then
+#    rm -r build
+#fi
+mkdir -p build
 cd build
 cmake ..
 make
