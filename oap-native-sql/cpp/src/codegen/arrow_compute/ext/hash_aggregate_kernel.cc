@@ -83,17 +83,17 @@ class HashAggregateKernel::Impl {
 
     std::stringstream signature_ss;
     signature_ss << std::hex << std::hash<std::string>{}(func_args_ss.str());
-    std::string signature = signature_ss.str();
-    std::cout << "signature is " << signature << std::endl;
+    signature_ = signature_ss.str();
+    std::cout << "signature is " << signature_ << std::endl;
 
     auto file_lock = FileSpinLock();
-    auto status = LoadLibrary(signature, ctx_, &hash_aggregater_);
+    auto status = LoadLibrary(signature_, ctx_, &hash_aggregater_);
     if (!status.ok()) {
       // process
       auto codes = ProduceCodes();
       // compile codes
-      RETURN_NOT_OK(CompileCodes(codes, signature));
-      RETURN_NOT_OK(LoadLibrary(signature, ctx_, &hash_aggregater_));
+      RETURN_NOT_OK(CompileCodes(codes, signature_));
+      RETURN_NOT_OK(LoadLibrary(signature_, ctx_, &hash_aggregater_));
     }
     FileSpinUnLock(file_lock);
     return arrow::Status::OK();
@@ -125,7 +125,10 @@ class HashAggregateKernel::Impl {
     return arrow::Status::OK();
   }
 
+  std::string GetSignature() { return signature_; }
+
  protected:
+  std::string signature_;
   std::vector<std::shared_ptr<arrow::Field>> input_field_list_;
   std::shared_ptr<arrow::Schema> original_input_schema_;
   std::shared_ptr<arrow::Schema> projected_input_schema_;
@@ -501,6 +504,8 @@ arrow::Status HashAggregateKernel::MakeResultIterator(
     std::shared_ptr<ResultIterator<arrow::RecordBatch>>* out) {
   return impl_->MakeResultIterator(schema, out);
 }
+
+std::string HashAggregateKernel::GetSignature() { return impl_->GetSignature(); }
 
 }  // namespace extra
 }  // namespace arrowcompute

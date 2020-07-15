@@ -20,7 +20,9 @@
 #include <arrow/pretty_print.h>
 #include <arrow/record_batch.h>
 #include <arrow/type.h>
+
 #include <chrono>
+
 #include "codegen/arrow_compute/expr_visitor.h"
 #include "codegen/code_generator.h"
 #include "codegen/common/result_iterator.h"
@@ -189,6 +191,14 @@ class ArrowComputeCodeGenerator : public CodeGenerator {
       }
     }
     return status;
+  }
+
+  std::string GetSignature() override {
+    std::stringstream ss;
+    for (auto visitor : visitor_list_) {
+      ss << visitor->GetSignature();
+    }
+    return ss.str();
   }
 
   arrow::Status finish(std::vector<std::shared_ptr<arrow::RecordBatch>>* out) {

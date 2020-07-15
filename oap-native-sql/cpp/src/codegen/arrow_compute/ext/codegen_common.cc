@@ -248,6 +248,7 @@ arrow::Status CompileCodes(std::string codes, std::string signature) {
   std::string prefix = "/spark-columnar-plugin-codegen-";
   std::string cppfile = outpath + prefix + signature + ".cc";
   std::string libfile = outpath + prefix + signature + ".so";
+  std::string jarfile = outpath + prefix + signature + ".jar";
   std::string logfile = outpath + prefix + signature + ".log";
   std::ofstream out(cppfile.c_str(), std::ofstream::out);
 
@@ -297,6 +298,13 @@ arrow::Status CompileCodes(std::string codes, std::string signature) {
     std::cout << cmd << std::endl;
     cmd = "ls -R -l " + GetTempPath() + "; cat " + logfile;
     system(cmd.c_str());
+    exit(EXIT_FAILURE);
+  }
+  cmd = "cd " + outpath + "; jar -cf spark-columnar-plugin-codegen-precompile-" +
+        signature + ".jar spark-columnar-plugin-codegen-" + signature + ".so";
+  std::cout << cmd << std::endl;
+  ret = system(cmd.c_str());
+  if (WEXITSTATUS(ret) != EXIT_SUCCESS) {
     exit(EXIT_FAILURE);
   }
 

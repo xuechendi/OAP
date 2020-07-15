@@ -95,11 +95,14 @@ class ConditionedProbeArraysKernel::Impl {
     return arrow::Status::OK();
   }
 
+  std::string GetSignature() { return signature_; }
+
  private:
   using ArrayType = typename arrow::TypeTraits<arrow::Int64Type>::ArrayType;
 
   arrow::compute::FunctionContext* ctx_;
   std::shared_ptr<CodeGenBase> prober_;
+  std::string signature_;
 
   arrow::Status GetResultIndexList(
       const std::shared_ptr<arrow::Schema>& result_schema,
@@ -178,10 +181,10 @@ class ConditionedProbeArraysKernel::Impl {
     std::cout << "signature original line is " << func_args_ss.str() << std::endl;
     std::stringstream signature_ss;
     signature_ss << std::hex << std::hash<std::string>{}(func_args_ss.str());
-    std::string signature = signature_ss.str();
+    signature_ = signature_ss.str();
 
     auto file_lock = FileSpinLock();
-    auto status = LoadLibrary(signature, ctx_, out);
+    auto status = LoadLibrary(signature_, ctx_, out);
     if (!status.ok()) {
       // process
       auto codes =
@@ -189,8 +192,8 @@ class ConditionedProbeArraysKernel::Impl {
                        left_shuffle_index_list, right_shuffle_index_list, left_field_list,
                        right_field_list, result_schema_index_list);
       // compile codes
-      RETURN_NOT_OK(CompileCodes(codes, signature));
-      RETURN_NOT_OK(LoadLibrary(signature, ctx_, out));
+      RETURN_NOT_OK(CompileCodes(codes, signature_));
+      RETURN_NOT_OK(LoadLibrary(signature_, ctx_, out));
     }
     FileSpinUnLock(file_lock);
     return arrow::Status::OK();
@@ -938,6 +941,8 @@ arrow::Status ConditionedProbeArraysKernel::MakeResultIterator(
     std::shared_ptr<ResultIterator<arrow::RecordBatch>>* out) {
   return impl_->MakeResultIterator(schema, out);
 }
+
+std::string ConditionedProbeArraysKernel::GetSignature() { return impl_->GetSignature(); }
 }  // namespace extra
 }  // namespace arrowcompute
 }  // namespace codegen

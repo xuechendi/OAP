@@ -84,16 +84,16 @@ class SortArraysToIndicesKernel::Impl {
 
     std::stringstream signature_ss;
     signature_ss << std::hex << std::hash<std::string>{}(func_args_ss.str());
-    std::string signature = signature_ss.str();
+    signature_ = signature_ss.str();
 
     auto file_lock = FileSpinLock();
-    auto status = LoadLibrary(signature, ctx_, &sorter);
+    auto status = LoadLibrary(signature_, ctx_, &sorter);
     if (!status.ok()) {
       // process
       auto codes = ProduceCodes(result_schema);
       // compile codes
-      RETURN_NOT_OK(CompileCodes(codes, signature));
-      RETURN_NOT_OK(LoadLibrary(signature, ctx_, &sorter));
+      RETURN_NOT_OK(CompileCodes(codes, signature_));
+      RETURN_NOT_OK(LoadLibrary(signature_, ctx_, &sorter));
     }
     FileSpinUnLock(file_lock);
     return arrow::Status::OK();
@@ -114,10 +114,12 @@ class SortArraysToIndicesKernel::Impl {
   virtual arrow::Status Finish(std::shared_ptr<arrow::Array>* out) {
     return arrow::Status::OK();
   }
+  std::string GetSignature() { return signature_; }
 
  protected:
   std::shared_ptr<CodeGenBase> sorter;
   arrow::compute::FunctionContext* ctx_;
+  std::string signature_;
   bool nulls_first_;
   bool asc_;
   std::vector<int> key_index_list_;
@@ -730,6 +732,8 @@ arrow::Status SortArraysToIndicesKernel::MakeResultIterator(
     std::shared_ptr<ResultIterator<arrow::RecordBatch>>* out) {
   return impl_->MakeResultIterator(schema, out);
 }
+
+std::string SortArraysToIndicesKernel::GetSignature() { return impl_->GetSignature(); }
 
 }  // namespace extra
 }  // namespace arrowcompute
