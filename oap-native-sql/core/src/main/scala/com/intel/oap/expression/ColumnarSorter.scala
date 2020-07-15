@@ -27,7 +27,7 @@ import com.intel.oap.vectorized.ExpressionEvaluator
 import com.intel.oap.vectorized.BatchIterator
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
@@ -234,7 +234,7 @@ object ColumnarSorter extends Logging {
       outputRows: SQLMetric,
       shuffleTime: SQLMetric,
       elapse: SQLMetric,
-      sparkConf: SparkConf): Unit = synchronized {
+      sparkConf: SparkConf): String = synchronized {
     init(
       sortOrder,
       outputAsColumnar,
@@ -246,15 +246,17 @@ object ColumnarSorter extends Logging {
       elapse,
       sparkConf)
     sorter = new ExpressionEvaluator()
-    sorter
+    val signature = sorter
       .build(arrowSchema, Lists.newArrayList(sort_expr), arrowSchema, true /*return at finish*/ )
     sorter.close
+    signature
   }
 
   def create(
       sortOrder: Seq[SortOrder],
       outputAsColumnar: Boolean,
       outputAttributes: Seq[Attribute],
+      listJars: Seq[String],
       sortTime: SQLMetric,
       outputBatches: SQLMetric,
       outputRows: SQLMetric,
@@ -271,7 +273,7 @@ object ColumnarSorter extends Logging {
       shuffleTime,
       elapse,
       sparkConf)
-    sorter = new ExpressionEvaluator()
+    sorter = new ExpressionEvaluator(listJars.toList.asJava)
     sorter
       .build(arrowSchema, Lists.newArrayList(sort_expr), arrowSchema, true /*return at finish*/ )
     new ColumnarSorter(

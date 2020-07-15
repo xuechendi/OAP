@@ -26,7 +26,6 @@ import org.apache.spark.TaskContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical._
@@ -35,7 +34,7 @@ import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.joins.{BuildLeft, BuildRight, BuildSide}
 
 import scala.collection.JavaConverters._
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
 import scala.collection.mutable.ListBuffer
@@ -205,48 +204,29 @@ object ColumnarShuffledHashJoin extends Logging {
       })
       .toList
 
-    val leftKeyAttributes = leftKeys.toList.map(expr => {
-      ConverterUtils.getAttrFromExpr(expr).asInstanceOf[Expression]
-    })
-    val rightKeyAttributes = rightKeys.toList.map(expr => {
-      ConverterUtils.getAttrFromExpr(expr).asInstanceOf[Expression]
-    })
-
-    val lkeyFieldList: List[Field] = leftKeyAttributes.toList.map(expr => {
+    logWarning(s"leftKeyExpression is ${leftKeys}, rightKeyExpression is ${rightKeys}")
+    val lkeyFieldList: List[Field] = leftKeys.toList.map(expr => {
       val attr = ConverterUtils.getAttrFromExpr(expr)
       Field
-        .nullable(s"${attr.name}#${attr.exprId.id}", CodeGeneration.getResultType(expr.dataType))
+        .nullable(s"${attr.name}#${attr.exprId.id}", CodeGeneration.getResultType(attr.dataType))
     })
 
-    val rkeyFieldList: List[Field] = rightKeyAttributes.toList.map(expr => {
+    val rkeyFieldList: List[Field] = rightKeys.toList.map(expr => {
       val attr = ConverterUtils.getAttrFromExpr(expr)
       Field
-        .nullable(s"${attr.name}#${attr.exprId.id}", CodeGeneration.getResultType(expr.dataType))
+        .nullable(s"${attr.name}#${attr.exprId.id}", CodeGeneration.getResultType(attr.dataType))
     })
 
     val (
       build_key_field_list,
       stream_key_field_list,
-      stream_key_ordinal_list,
       build_input_field_list,
       stream_input_field_list) = buildSide match {
       case BuildLeft =>
-        val stream_key_expr_list = bindReferences(rightKeyAttributes, r_input_schema)
-        (
-          lkeyFieldList,
-          rkeyFieldList,
-          stream_key_expr_list.toList.map(_.asInstanceOf[BoundReference].ordinal),
-          l_input_field_list,
-          r_input_field_list)
+        (lkeyFieldList, rkeyFieldList, l_input_field_list, r_input_field_list)
 
       case BuildRight =>
-        val stream_key_expr_list = bindReferences(leftKeyAttributes, l_input_schema)
-        (
-          rkeyFieldList,
-          lkeyFieldList,
-          stream_key_expr_list.toList.map(_.asInstanceOf[BoundReference].ordinal),
-          r_input_field_list,
-          l_input_field_list)
+        (rkeyFieldList, lkeyFieldList, r_input_field_list, l_input_field_list)
 
     }
 
@@ -386,7 +366,7 @@ object ColumnarShuffledHashJoin extends Logging {
       buildTime: SQLMetric,
       joinTime: SQLMetric,
       numOutputRows: SQLMetric,
-      sparkConf: SparkConf): Unit = synchronized {
+      sparkConf: SparkConf): String = synchronized {
     init(
       leftKeys,
       rightKeys,
@@ -402,12 +382,13 @@ object ColumnarShuffledHashJoin extends Logging {
       sparkConf)
 
     prober = new ExpressionEvaluator()
-    prober.build(
+    val signature = prober.build(
       build_input_arrow_schema,
       Lists.newArrayList(condition_probe_expr),
       output_arrow_schema,
       true)
     prober.close
+    signature
 
   }
   def create(
@@ -419,6 +400,7 @@ object ColumnarShuffledHashJoin extends Logging {
       condition: Option[Expression],
       left: SparkPlan,
       right: SparkPlan,
+      listJars: Seq[String],
       buildTime: SQLMetric,
       joinTime: SQLMetric,
       numOutputRows: SQLMetric,
@@ -437,7 +419,7 @@ object ColumnarShuffledHashJoin extends Logging {
       numOutputRows,
       sparkConf)
 
-    prober = new ExpressionEvaluator()
+    prober = new ExpressionEvaluator(listJars.toList.asJava)
     prober.build(
       build_input_arrow_schema,
       Lists.newArrayList(condition_probe_expr),

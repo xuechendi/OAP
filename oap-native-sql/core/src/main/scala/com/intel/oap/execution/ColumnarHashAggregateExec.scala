@@ -26,6 +26,7 @@ import java.util.concurrent.TimeUnit._
 import org.apache.spark.TaskContext
 import org.apache.spark.memory.{SparkOutOfMemoryError, TaskMemoryManager}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.util.{Utils, UserAddedJarUtils}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
@@ -91,23 +92,38 @@ class ColumnarHashAggregateExec(
   numOutputBatches.set(0)
   numInputBatches.set(0)
 
-  if (ColumnarPluginConfig
-        .getConf(sparkConf)
-        .enableCodegenHashAggregate && groupingExpressions.nonEmpty) {
-    ColumnarGroupbyHashAggregation.prebuild(
-      groupingExpressions,
-      child.output,
-      aggregateExpressions,
-      aggregateAttributes,
-      resultExpressions,
-      output,
-      numInputBatches,
-      numOutputBatches,
-      numOutputRows,
-      aggTime,
-      elapseTime,
-      sparkConf)
-  }
+  val (listJars, signature): (Seq[String], String) =
+    if (ColumnarPluginConfig
+          .getConf(sparkConf)
+          .enableCodegenHashAggregate && groupingExpressions.nonEmpty) {
+      val signature = ColumnarGroupbyHashAggregation.prebuild(
+        groupingExpressions,
+        child.output,
+        aggregateExpressions,
+        aggregateAttributes,
+        resultExpressions,
+        output,
+        numInputBatches,
+        numOutputBatches,
+        numOutputRows,
+        aggTime,
+        elapseTime,
+        sparkConf)
+      if (signature != "") {
+        if (sparkContext.listJars.filter(path => path.contains(s"${signature}.jar")).isEmpty) {
+          val tempDir = ColumnarPluginConfig.getTempFile
+          val jarFileName =
+            s"${tempDir}/tmp/spark-columnar-plugin-codegen-precompile-${signature}.jar"
+          sparkContext.addJar(jarFileName)
+        }
+        (sparkContext.listJars.filter(path => path.contains(s"${signature}.jar")), signature)
+      } else {
+        (List(), "")
+      }
+    } else {
+      (List(), "")
+    }
+  listJars.foreach(jar => logWarning(s"Uploaded ${jar}"))
 
   override def doExecuteColumnar(): RDD[ColumnarBatch] = {
     child.executeColumnar().mapPartitionsWithIndex { (partIndex, iter) =>
@@ -120,6 +136,17 @@ class ColumnarHashAggregateExec(
         if (ColumnarPluginConfig
               .getConf(sparkConf)
               .enableCodegenHashAggregate && groupingExpressions.nonEmpty) {
+          val execTempDir = ColumnarPluginConfig.getTempFile
+          val jarList = listJars
+            .map(jarUrl => {
+              logWarning(s"Get Codegened library Jar ${jarUrl}")
+              UserAddedJarUtils.fetchJarFromSpark(
+                jarUrl,
+                execTempDir,
+                s"spark-columnar-plugin-codegen-precompile-${signature}.jar",
+                sparkConf)
+              s"${execTempDir}/spark-columnar-plugin-codegen-precompile-${signature}.jar"
+            })
           val aggregation = ColumnarGroupbyHashAggregation.create(
             groupingExpressions,
             child.output,
@@ -127,6 +154,7 @@ class ColumnarHashAggregateExec(
             aggregateAttributes,
             resultExpressions,
             output,
+            jarList,
             numInputBatches,
             numOutputBatches,
             numOutputRows,

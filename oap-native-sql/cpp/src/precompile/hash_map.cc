@@ -30,21 +30,14 @@ namespace precompile {
   int32_t TYPENAME::Get(const TYPE& value) { return impl_->Get(value); }                \
   int32_t TYPENAME::GetNull() { return impl_->GetNull(); }
 
-TYPED_SPARSE_HASH_MAP_IMPL(Int32HashMap, int32_t)
-TYPED_SPARSE_HASH_MAP_IMPL(Int64HashMap, int64_t)
-TYPED_SPARSE_HASH_MAP_IMPL(UInt32HashMap, uint32_t)
-TYPED_SPARSE_HASH_MAP_IMPL(UInt64HashMap, uint64_t)
-TYPED_SPARSE_HASH_MAP_IMPL(FloatHashMap, float)
-TYPED_SPARSE_HASH_MAP_IMPL(DoubleHashMap, double)
-TYPED_SPARSE_HASH_MAP_IMPL(Date32HashMap, int32_t)
 #undef TYPED_SPARSE_HASH_MAP_IMPL
 
-#define TYPED_ARROW_HASH_MAP_IMPL(HASHMAPNAME, TYPENAME, TYPE)                         \
-  using MemoTableType =                                                                \
+#define TYPED_ARROW_HASH_MAP_IMPL(HASHMAPNAME, TYPENAME, TYPE, MEMOTABLETYPE)                         \
+  using MEMOTABLETYPE =                                                                \
       typename arrow::internal::HashTraits<arrow::TYPENAME>::MemoTableType;            \
-  class HASHMAPNAME::Impl : public MemoTableType {                                     \
+  class HASHMAPNAME::Impl : public MEMOTABLETYPE {                                     \
    public:                                                                             \
-    Impl(arrow::MemoryPool* pool) : MemoTableType(pool) {}                             \
+    Impl(arrow::MemoryPool* pool) : MEMOTABLETYPE(pool) {}                             \
   };                                                                                   \
                                                                                        \
   HASHMAPNAME::HASHMAPNAME(arrow::MemoryPool* pool) {                                  \
@@ -62,7 +55,15 @@ TYPED_SPARSE_HASH_MAP_IMPL(Date32HashMap, int32_t)
   int32_t HASHMAPNAME::Get(const TYPE& value) { return impl_->Get(value); }            \
   int32_t HASHMAPNAME::GetNull() { return impl_->GetNull(); }
 
-TYPED_ARROW_HASH_MAP_IMPL(StringHashMap, StringType, std::string)
+
+TYPED_ARROW_HASH_MAP_IMPL(Int32HashMap, Int32Type, int32_t, Int32MemoTableType)
+TYPED_ARROW_HASH_MAP_IMPL(Int64HashMap, Int64Type, int64_t, Int64MemoTableType)
+TYPED_ARROW_HASH_MAP_IMPL(UInt32HashMap, UInt32Type, uint32_t, UInt32MemoTableType)
+TYPED_ARROW_HASH_MAP_IMPL(UInt64HashMap, UInt64Type, uint64_t, UInt64MemoTableType)
+TYPED_ARROW_HASH_MAP_IMPL(FloatHashMap, FloatType, float, FloatMemoTableType)
+TYPED_ARROW_HASH_MAP_IMPL(DoubleHashMap, DoubleType, double, DoubleMemoTableType)
+TYPED_ARROW_HASH_MAP_IMPL(Date32HashMap, Date32Type, int32_t, Date32MemoTableType)
+TYPED_ARROW_HASH_MAP_IMPL(StringHashMap, StringType, std::string, StringMemoTableType)
 #undef TYPED_ARROW_HASH_MAP_IMPL
 
 }  // namespace precompile

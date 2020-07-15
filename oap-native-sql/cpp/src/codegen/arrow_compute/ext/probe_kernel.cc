@@ -96,11 +96,14 @@ class ConditionedProbeArraysKernel::Impl {
     return arrow::Status::OK();
   }
 
+  std::string GetSignature() { return signature_; }
+
  private:
   using ArrayType = typename arrow::TypeTraits<arrow::Int64Type>::ArrayType;
 
   arrow::compute::FunctionContext* ctx_;
   std::shared_ptr<CodeGenBase> prober_;
+  std::string signature_;
 
   arrow::Status GetResultIndexList(
       const std::shared_ptr<arrow::Schema>& result_schema,
@@ -188,13 +191,15 @@ class ConditionedProbeArraysKernel::Impl {
       func_args_ss << i << ",";
     }
 
+#ifdef DEBUG
     std::cout << "signature original line is " << func_args_ss.str() << std::endl;
+#endif
     std::stringstream signature_ss;
     signature_ss << std::hex << std::hash<std::string>{}(func_args_ss.str());
-    std::string signature = signature_ss.str();
+    signature_ = signature_ss.str();
 
     auto file_lock = FileSpinLock();
-    auto status = LoadLibrary(signature, ctx_, out);
+    auto status = LoadLibrary(signature_, ctx_, out);
     if (!status.ok()) {
       // process
       auto codes =
@@ -202,8 +207,8 @@ class ConditionedProbeArraysKernel::Impl {
                        left_shuffle_index_list, right_shuffle_index_list, left_field_list,
                        right_field_list, result_schema_index_list, exist_index);
       // compile codes
-      RETURN_NOT_OK(CompileCodes(codes, signature));
-      RETURN_NOT_OK(LoadLibrary(signature, ctx_, out));
+      RETURN_NOT_OK(CompileCodes(codes, signature_));
+      RETURN_NOT_OK(LoadLibrary(signature_, ctx_, out));
     }
     FileSpinUnLock(file_lock);
     return arrow::Status::OK();
@@ -763,14 +768,17 @@ class ConditionedProbeArraysKernel::Impl {
     std::vector<int> right_cond_index_list;
     bool cond_check = false;
     bool multiple_cols = (left_key_index_list.size() > 1);
-    std::string hash_map_type_str = GetTypeString(arrow::int32(), "") + "HashMap";
+    std::string hash_map_include_str = R"(#include "precompile/sparse_hash_map.h")";
+    std::string hash_map_type_str =
+        "SparseHashMap<" + GetCTypeString(arrow::int32()) + ">";
     std::string hash_map_define_str =
         "std::make_shared<" + hash_map_type_str + ">(ctx_->memory_pool());";
     if (!multiple_cols) {
-      std::string hash_map_type_str =
-          GetTypeString(left_field_list[left_key_index_list[0]]->type(), "") + "HashMap";
       hash_map_type_str =
           GetTypeString(left_field_list[left_key_index_list[0]]->type(), "") + "HashMap";
+      hash_map_include_str = R"(#include "precompile/hash_map.h")";
+      hash_map_define_str =
+          "std::make_shared<" + hash_map_type_str + ">(ctx_->memory_pool());";
     }
     std::string condition_check_str;
     if (func_node) {
@@ -827,7 +835,8 @@ class ConditionedProbeArraysKernel::Impl {
 #include "codegen/arrow_compute/ext/array_item_index.h"
 #include "precompile/builder.h"
 #include "precompile/hash_arrays_kernel.h"
-#include "precompile/hash_map.h"
+)" + hash_map_include_str +
+           R"(
 using namespace sparkcolumnarplugin::precompile;
 
 class TypedProberImpl : public CodeGenBase {
@@ -1014,6 +1023,8 @@ arrow::Status ConditionedProbeArraysKernel::MakeResultIterator(
     std::shared_ptr<ResultIterator<arrow::RecordBatch>>* out) {
   return impl_->MakeResultIterator(schema, out);
 }
+
+std::string ConditionedProbeArraysKernel::GetSignature() { return impl_->GetSignature(); }
 }  // namespace extra
 }  // namespace arrowcompute
 }  // namespace codegen

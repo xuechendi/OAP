@@ -55,8 +55,10 @@ class HashAggregateKernel::Impl {
         result_schema_(result_schema) {
     // if there is projection inside aggregate, we need to extract them into
     // projector_list
-    THROW_NOT_OK(PrepareActionCodegen());
-    THROW_NOT_OK(LoadJITFunction());
+    auto status = PrepareActionCodegen();
+    if (status.ok()) {
+      THROW_NOT_OK(LoadJITFunction());
+    }
   }
   virtual arrow::Status LoadJITFunction() {
     // generate ddl signature
@@ -77,23 +79,25 @@ class HashAggregateKernel::Impl {
       func_args_ss << field->type()->ToString() << "|";
     }
 
-    //#ifdef DEBUG
+#ifdef DEBUG
     std::cout << "func_args_ss is " << func_args_ss.str() << std::endl;
-    //#endif
+#endif
 
     std::stringstream signature_ss;
     signature_ss << std::hex << std::hash<std::string>{}(func_args_ss.str());
-    std::string signature = signature_ss.str();
-    std::cout << "signature is " << signature << std::endl;
+    signature_ = signature_ss.str();
+#ifdef DEBUG
+    std::cout << "signature is " << signature_ << std::endl;
+#endif
 
     auto file_lock = FileSpinLock();
-    auto status = LoadLibrary(signature, ctx_, &hash_aggregater_);
+    auto status = LoadLibrary(signature_, ctx_, &hash_aggregater_);
     if (!status.ok()) {
       // process
       auto codes = ProduceCodes();
       // compile codes
-      RETURN_NOT_OK(CompileCodes(codes, signature));
-      RETURN_NOT_OK(LoadLibrary(signature, ctx_, &hash_aggregater_));
+      RETURN_NOT_OK(CompileCodes(codes, signature_));
+      RETURN_NOT_OK(LoadLibrary(signature_, ctx_, &hash_aggregater_));
     }
     FileSpinUnLock(file_lock);
     return arrow::Status::OK();
@@ -125,7 +129,10 @@ class HashAggregateKernel::Impl {
     return arrow::Status::OK();
   }
 
+  std::string GetSignature() { return signature_; }
+
  protected:
+  std::string signature_;
   std::vector<std::shared_ptr<arrow::Field>> input_field_list_;
   std::shared_ptr<arrow::Schema> original_input_schema_;
   std::shared_ptr<arrow::Schema> projected_input_schema_;
@@ -146,6 +153,11 @@ class HashAggregateKernel::Impl {
       std::shared_ptr<ActionCodeGen> action_codegen;
       RETURN_NOT_OK(MakeCodeGenNodeVisitor(func_node, input_field_list_, &action_codegen,
                                            &codegen_visitor));
+      if (!action_codegen) {
+        // some action use field not in input schema
+        // This is happened when spark pass none field.
+        return arrow::Status::Invalid("some action field is not exists in input schema");
+      }
       action_impl_list_.push_back(action_codegen);
       if (action_codegen->IsPreProjected()) {
         auto expr = action_codegen->GetProjectorExpr();
@@ -269,13 +281,8 @@ class HashAggregateKernel::Impl {
     std::string evaluate_get_typed_key_array_str;
     std::string evaluate_get_typed_key_method_str;
     if (!multiple_cols) {
-      if (key_list_[0].first->type()->id() == arrow::Type::STRING) {
-        hash_map_type_str = GetTypeString(key_list_[0].first->type(), "") + "HashMap";
-        hash_map_include_str = R"(#include "precompile/hash_map.h")";
-      } else {
-        hash_map_type_str =
-            "SparseHashMap<" + GetCTypeString(key_list_[0].first->type()) + ">";
-      }
+      hash_map_type_str = GetTypeString(key_list_[0].first->type(), "") + "HashMap";
+      hash_map_include_str = R"(#include "precompile/hash_map.h")";
       hash_map_define_str =
           "std::make_shared<" + hash_map_type_str + ">(ctx_->memory_pool());";
       evaluate_get_typed_key_array_str =
@@ -444,7 +451,7 @@ extern "C" void MakeCodeGen(arrow::compute::FunctionContext* ctx,
       if (action->IsGroupBy()) {
         key_index_list->push_back(std::make_pair(action->GetInputFieldList()[0],
                                                  action->GetInputDataNameList()[0]));
-        std::cout << action->GetInputFieldList()[0]->ToString() << std::endl;
+        // std::cout << action->GetInputFieldList()[0]->ToString() << std::endl;
       }
     }
     return arrow::Status::OK();
@@ -501,6 +508,8 @@ arrow::Status HashAggregateKernel::MakeResultIterator(
     std::shared_ptr<ResultIterator<arrow::RecordBatch>>* out) {
   return impl_->MakeResultIterator(schema, out);
 }
+
+std::string HashAggregateKernel::GetSignature() { return impl_->GetSignature(); }
 
 }  // namespace extra
 }  // namespace arrowcompute

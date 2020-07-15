@@ -71,7 +71,7 @@ std::string GetArrowTypeDefString(std::shared_ptr<arrow::DataType> type) {
     case arrow::StringType::type_id:
       return "utf8()";
     case arrow::BooleanType::type_id:
-      return "boolean()";  
+      return "boolean()";
     default:
       std::cout << "GetArrowTypeString can't convert " << type->ToString() << std::endl;
       throw;
@@ -104,7 +104,7 @@ std::string GetCTypeString(std::shared_ptr<arrow::DataType> type) {
     case arrow::StringType::type_id:
       return "std::string";
     case arrow::BooleanType::type_id:
-      return "bool";    
+      return "bool";
     default:
       std::cout << "GetCTypeString can't convert " << type->ToString() << std::endl;
       throw;
@@ -137,7 +137,7 @@ std::string GetTypeString(std::shared_ptr<arrow::DataType> type, std::string tai
     case arrow::StringType::type_id:
       return "String" + tail;
     case arrow::BooleanType::type_id:
-      return "Boolean" + tail;    
+      return "Boolean" + tail;
     default:
       std::cout << "GetTypeString can't convert " << type->ToString() << std::endl;
       throw;
@@ -197,7 +197,7 @@ arrow::Status GetIndexListFromSchema(
   int i = 0;
   for (auto field : field_list) {
     auto indices = result_schema->GetAllFieldIndices(field->name());
-    if (indices.size() == 1) {
+    if (indices.size() >= 1) {
       (*index_list).push_back(i);
     }
     i++;
@@ -254,6 +254,7 @@ arrow::Status CompileCodes(std::string codes, std::string signature) {
   std::string prefix = "/spark-columnar-plugin-codegen-";
   std::string cppfile = outpath + prefix + signature + ".cc";
   std::string libfile = outpath + prefix + signature + ".so";
+  std::string jarfile = outpath + prefix + signature + ".jar";
   std::string logfile = outpath + prefix + signature + ".log";
   std::ofstream out(cppfile.c_str(), std::ofstream::out);
 
@@ -294,15 +295,24 @@ arrow::Status CompileCodes(std::string codes, std::string signature) {
                     arrow_lib + arrow_lib2 + nativesql_header + nativesql_header_2 +
                     nativesql_lib + cppfile + " -o " + libfile +
                     " -O3 -march=native -shared -fPIC -lspark_columnar_jni 2> " + logfile;
-  //#ifdef DEBUG
+#ifdef DEBUG
   std::cout << cmd << std::endl;
-  //#endif
+#endif
   int ret = system(cmd.c_str());
   if (WEXITSTATUS(ret) != EXIT_SUCCESS) {
     std::cout << "compilation failed, see " << logfile << std::endl;
     std::cout << cmd << std::endl;
     cmd = "ls -R -l " + GetTempPath() + "; cat " + logfile;
     system(cmd.c_str());
+    exit(EXIT_FAILURE);
+  }
+  cmd = "cd " + outpath + "; jar -cf spark-columnar-plugin-codegen-precompile-" +
+        signature + ".jar spark-columnar-plugin-codegen-" + signature + ".so";
+#ifdef DEBUG
+  std::cout << cmd << std::endl;
+#endif
+  ret = system(cmd.c_str());
+  if (WEXITSTATUS(ret) != EXIT_SUCCESS) {
     exit(EXIT_FAILURE);
   }
 
