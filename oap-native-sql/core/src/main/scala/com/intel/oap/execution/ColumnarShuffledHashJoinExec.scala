@@ -67,16 +67,6 @@ class ColumnarShuffledHashJoinExec(
     extends ShuffledHashJoinExec(leftKeys, rightKeys, joinType, buildSide, condition, left, right) {
 
   val sparkConf = sparkContext.getConf
-  val tempDir = ColumnarPluginConfig.getTempFile
-  val listJars = sparkContext.listJars
-  val jarList = listJars.map(jarUrl => {
-    UserAddedJarUtils.fetchJarFromSpark(
-      jarUrl,
-      tempDir,
-      "spark-columnar-plugin-codegen-precompile.jar",
-      sparkConf)
-    s"${tempDir}/spark-columnar-plugin-codegen-precompile.jar"
-  })
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
     "joinTime" -> SQLMetrics.createTimingMetric(sparkContext, "join time"),
@@ -91,7 +81,7 @@ class ColumnarShuffledHashJoinExec(
 
   //TODO() Disable code generation
   //override def supportCodegen: Boolean = false
-  ColumnarShuffledHashJoin.prebuild(
+  val signature: String = ColumnarShuffledHashJoin.prebuild(
     leftKeys,
     rightKeys,
     resultSchema,
@@ -104,12 +94,31 @@ class ColumnarShuffledHashJoinExec(
     joinTime,
     numOutputRows,
     sparkConf)
+  if (sparkContext.listJars.filter(path => path.contains(s"${signature}.jar")).isEmpty) {
+    val tempDir = ColumnarPluginConfig.getTempFile
+    val jarFileName = s"${tempDir}/tmp/spark-columnar-plugin-codegen-precompile-${signature}.jar"
+    sparkContext.addJar(jarFileName)
+  }
+  val listJars = sparkContext.listJars.filter(path => path.contains(s"${signature}.jar"))
 
   override def doExecuteColumnar(): RDD[ColumnarBatch] = {
     streamedPlan.executeColumnar().zipPartitions(buildPlan.executeColumnar()) {
       (streamIter, buildIter) =>
         //val hashed = buildHashedRelation(buildIter)
         //join(streamIter, hashed, numOutputRows)
+        ColumnarPluginConfig.getConf(sparkConf)
+        val execTempDir = ColumnarPluginConfig.getTempFile
+        val jarList = listJars
+          .map(jarUrl => {
+            logWarning(s"Get Codegened library Jar ${jarUrl}")
+            UserAddedJarUtils.fetchJarFromSpark(
+              jarUrl,
+              execTempDir,
+              s"spark-columnar-plugin-codegen-precompile-${signature}.jar",
+              sparkConf)
+            s"${execTempDir}/spark-columnar-plugin-codegen-precompile-${signature}.jar"
+          })
+
         val vjoin = ColumnarShuffledHashJoin.create(
           leftKeys,
           rightKeys,

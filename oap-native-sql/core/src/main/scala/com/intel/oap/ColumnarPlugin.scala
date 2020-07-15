@@ -19,6 +19,8 @@ package com.intel.oap
 
 import java.util.Locale
 
+import java.io.{File, BufferedReader, InputStreamReader};
+import java.nio.file.Files;
 import com.intel.oap.execution._
 import org.apache.spark.internal.Logging
 import org.apache.spark.SparkConf
@@ -30,6 +32,7 @@ import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.joins.ShuffledHashJoinExec
 import org.apache.spark.sql.{SparkSession, SparkSessionExtensions}
+import java.io.IOException
 
 case class ColumnarPreOverrides(conf: SparkConf) extends Rule[SparkPlan] {
   val columnarConf = ColumnarPluginConfig.getConf(conf)
@@ -126,6 +129,7 @@ case class ColumnarPostOverrides(conf: SparkConf) extends Rule[SparkPlan] {
   def apply(plan: SparkPlan): SparkPlan = {
     replaceWithColumnarPlan(plan)
   }
+
 }
 
 case class ColumnarOverrideRules(session: SparkSession) extends ColumnarRule with Logging {
@@ -145,15 +149,12 @@ case class ColumnarOverrideRules(session: SparkSession) extends ColumnarRule wit
 
   override def postColumnarTransitions: Rule[SparkPlan] = plan => {
     if (columnarEnabled) {
-      val out_plan = postOverrides(plan)
-      session.sparkContext.addJar(
-        "/tmp/nativesql/tmp/spark-columnar-plugin-codegen-precompile.jar")
-      logWarning(s"current jars are ${session.sparkContext.listJars}")
-      out_plan
+      postOverrides(plan)
     } else {
       plan
     }
   }
+
 }
 
 /**

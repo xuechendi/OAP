@@ -369,7 +369,7 @@ object ColumnarShuffledHashJoin extends Logging {
       buildTime: SQLMetric,
       joinTime: SQLMetric,
       numOutputRows: SQLMetric,
-      sparkConf: SparkConf): Unit = synchronized {
+      sparkConf: SparkConf): String = synchronized {
     init(
       leftKeys,
       rightKeys,
@@ -385,12 +385,13 @@ object ColumnarShuffledHashJoin extends Logging {
       sparkConf)
 
     prober = new ExpressionEvaluator()
-    prober.build(
+    val signature = prober.build(
       build_input_arrow_schema,
       Lists.newArrayList(condition_probe_expr),
       output_arrow_schema,
       true)
     prober.close
+    signature
 
   }
   def create(

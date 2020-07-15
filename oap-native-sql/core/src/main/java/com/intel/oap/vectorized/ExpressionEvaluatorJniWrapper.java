@@ -114,6 +114,14 @@ public class ExpressionEvaluatorJniWrapper {
                         long[] bufSizes) throws RuntimeException;
 
         /**
+         * Get native kernel signature by the nativeHandler.
+         *
+         * @param nativeHandler nativeHandler representing expressions. Created using a
+         *                      call to buildNativeCode
+         */
+        native String nativeGetSignature(long nativeHandler) throws RuntimeException;
+
+        /**
          * Evaluate the expressions represented by the nativeHandler on a record batch
          * and store the output in ValueVectors. Throws an exception in case of errors
          *

@@ -27,6 +27,7 @@ import java.net.URL;
 import java.net.URLConnection;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.List;
 import java.util.jar.JarEntry;
@@ -37,7 +38,7 @@ public class JniUtils {
   private static final String LIBRARY_NAME = "spark_columnar_jni";
   private static boolean isLoaded = false;
   private static boolean isCodegenDependencyLoaded = false;
-  private static boolean isCodegenPreBuildLoaded = false;
+  private static List<String> codegenJarsLoadedCache = new ArrayList<>();
   private static volatile JniUtils INSTANCE;
   private String tmp_dir;
 
@@ -82,11 +83,11 @@ public class JniUtils {
   }
 
   public void setJars(List<String> list_jars) throws IOException, IllegalAccessException {
-    if (isCodegenPreBuildLoaded == false) {
-      for (String jar : list_jars) {
+    for (String jar : list_jars) {
+      if (!codegenJarsLoadedCache.contains(jar)) {
         loadLibraryFromJar(jar, tmp_dir);
+        codegenJarsLoadedCache.add(jar);
       }
-      isCodegenPreBuildLoaded = true;
     }
   }
 
@@ -125,11 +126,15 @@ public class JniUtils {
         tmp_dir = System.getProperty("java.io.tmpdir");
         System.out.println("loadLibraryFromJar " + tmp_dir);
       }
-      final String folderToLoad = "lib";
-      URL url = new URL("jar:file:" + source_jar + "!/lib/");
+      final String folderToLoad = "";
+      URL url = new URL("jar:file:" + source_jar + "!/");
       System.out.println("precompiled_jar is " + url);
       final URLConnection urlConnection = (JarURLConnection) url.openConnection();
-      System.out.println(urlConnection);
+      File tmp_dir_handler = new File(tmp_dir + "/tmp");
+      if (!tmp_dir_handler.exists()) {
+        tmp_dir_handler.mkdirs();
+      }
+
       if (urlConnection instanceof JarURLConnection) {
         final JarFile jarFile = ((JarURLConnection) urlConnection).getJarFile();
         copyResourcesToDirectory(jarFile, folderToLoad, tmp_dir + "/tmp/");
@@ -182,8 +187,10 @@ public class JniUtils {
   public static void copyResourcesToDirectory(JarFile fromJar, String jarDir, String destDir) throws IOException {
     for (Enumeration<JarEntry> entries = fromJar.entries(); entries.hasMoreElements();) {
       JarEntry entry = entries.nextElement();
-      if (entry.getName().startsWith(jarDir + "/") && !entry.isDirectory()) {
-        File dest = new File(destDir + "/" + entry.getName().substring(jarDir.length() + 1));
+      if (((jarDir == "" && !entry.getName().contains("META-INF")) || (entry.getName().startsWith(jarDir + "/")))
+          && !entry.isDirectory()) {
+        int rm_length = jarDir.length() == 0 ? 0 : jarDir.length() + 1;
+        File dest = new File(destDir + "/" + entry.getName().substring(rm_length));
         File parent = dest.getParentFile();
         if (parent != null) {
           parent.mkdirs();

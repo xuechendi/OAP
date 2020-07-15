@@ -234,7 +234,7 @@ object ColumnarSorter extends Logging {
       outputRows: SQLMetric,
       shuffleTime: SQLMetric,
       elapse: SQLMetric,
-      sparkConf: SparkConf): Unit = synchronized {
+      sparkConf: SparkConf): String = synchronized {
     init(
       sortOrder,
       outputAsColumnar,
@@ -246,9 +246,10 @@ object ColumnarSorter extends Logging {
       elapse,
       sparkConf)
     sorter = new ExpressionEvaluator()
-    sorter
+    val signature = sorter
       .build(arrowSchema, Lists.newArrayList(sort_expr), arrowSchema, true /*return at finish*/ )
     sorter.close
+    signature
   }
 
   def create(

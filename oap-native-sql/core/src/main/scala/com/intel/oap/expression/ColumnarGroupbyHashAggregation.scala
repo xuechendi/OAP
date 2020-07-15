@@ -466,7 +466,7 @@ object ColumnarGroupbyHashAggregation extends Logging {
       numOutputRows: SQLMetric,
       aggrTime: SQLMetric,
       elapseTime: SQLMetric,
-      sparkConf: SparkConf): Unit = synchronized {
+      sparkConf: SparkConf): String = synchronized {
     init(
       groupingExpressions,
       originalInputAttributes,
@@ -481,12 +481,13 @@ object ColumnarGroupbyHashAggregation extends Logging {
       elapseTime,
       sparkConf)
     aggregator = new ExpressionEvaluator()
-    aggregator.build(
+    val signature = aggregator.build(
       originalInputArrowSchema,
       Lists.newArrayList(nativeExpressionNode),
       aggregateAttributeArrowSchema,
       true)
     aggregator.close
+    signature
   }
 
   def create(
