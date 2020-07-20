@@ -28,6 +28,31 @@ class Array {
   uint64_t null_count_;
 };
 
+class BooleanArray {
+ public:
+  BooleanArray(const std::shared_ptr<arrow::Array>&);
+  bool GetView(int64_t i) const {
+    auto bits = reinterpret_cast<const uint8_t*>(raw_value_);
+    i += offset_;
+    return (bits[i >> 3] >> (i & 0x07)) & 1;
+  }
+  bool IsNull(int64_t i) const {
+    i += offset_;
+    return null_bitmap_data_ != NULLPTR &&
+           !((null_bitmap_data_[i >> 3] >> (i & 0x07)) & 1);
+  }
+  int64_t length() const { return length_; }
+  int64_t null_count() const { return null_count_; }
+
+ private:
+  std::shared_ptr<arrow::Array> cache_;
+  const uint8_t* raw_value_;
+  const uint8_t* null_bitmap_data_;
+  uint64_t offset_;
+  uint64_t length_;
+  uint64_t null_count_;
+};
+
 #define TYPED_ARRAY_DEFINE(TYPENAME, TYPE)                     \
   class TYPENAME {                                             \
    public:                                                     \

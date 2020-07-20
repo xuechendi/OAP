@@ -13,6 +13,15 @@ Array::Array(const std::shared_ptr<arrow::Array>& in) : cache_(in) {
   raw_value_ = in->data()->buffers[1]->mutable_data();
 }
 
+BooleanArray::BooleanArray(const std::shared_ptr<arrow::Array>& in) : cache_(in) {
+  offset_ = in->offset();
+  length_ = in->length();
+  null_count_ = in->null_count();
+  null_bitmap_data_ = in->null_bitmap_data();
+  auto typed_in = std::dynamic_pointer_cast<arrow::NumericArray<arrow::UInt8Type>>(in);
+  raw_value_ = typed_in->raw_values();
+}
+
 #define TYPED_NUMERIC_ARRAY_IMPL(TYPENAME, TYPE)                             \
   TYPENAME::TYPENAME(const std::shared_ptr<arrow::Array>& in) : cache_(in) { \
     offset_ = in->offset();                                                  \
