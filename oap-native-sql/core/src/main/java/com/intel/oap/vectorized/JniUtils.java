@@ -77,7 +77,6 @@ public class JniUtils {
     if (isCodegenDependencyLoaded == false) {
       tmp_dir = _tmp_dir;
       loadIncludeFromJar(tmp_dir);
-      loadLibFromJar(tmp_dir);
       isCodegenDependencyLoaded = true;
     }
   }
@@ -100,23 +99,6 @@ public class JniUtils {
       final String libraryToLoad = System.mapLibraryName(LIBRARY_NAME);
       final File libraryFile = moveFileFromJarToTemp(tmp_dir, libraryToLoad);
       System.load(libraryFile.getAbsolutePath());
-    }
-  }
-
-  private static void loadLibFromJar(String tmp_dir) throws IOException, IllegalAccessException {
-    synchronized (JniUtils.class) {
-      if (tmp_dir == null) {
-        tmp_dir = System.getProperty("java.io.tmpdir");
-        System.out.println("loadLibFromJar " + tmp_dir);
-      }
-      final String folderToLoad = "lib";
-      final URLConnection urlConnection = JniUtils.class.getClassLoader().getResource("lib").openConnection();
-      if (urlConnection instanceof JarURLConnection) {
-        final JarFile jarFile = ((JarURLConnection) urlConnection).getJarFile();
-        copyResourcesToDirectory(jarFile, folderToLoad, tmp_dir + "/");
-      } else {
-        throw new IOException(urlConnection.toString() + " is not JarUrlConnection");
-      }
     }
   }
 
