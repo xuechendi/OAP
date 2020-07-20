@@ -774,9 +774,16 @@ class ConditionedProbeArraysKernel::Impl {
     std::string hash_map_define_str =
         "std::make_shared<" + hash_map_type_str + ">(ctx_->memory_pool());";
     if (!multiple_cols) {
-      hash_map_type_str =
-          GetTypeString(left_field_list[left_key_index_list[0]]->type(), "") + "HashMap";
-      hash_map_include_str = R"(#include "precompile/hash_map.h")";
+      if (left_field_list[left_key_index_list[0]]->type()->id() == arrow::Type::STRING) {
+        hash_map_type_str =
+            GetTypeString(left_field_list[left_key_index_list[0]]->type(), "") +
+            "HashMap";
+        hash_map_include_str = R"(#include "precompile/hash_map.h")";
+      } else {
+        hash_map_type_str =
+            "SparseHashMap<" +
+            GetCTypeString(left_field_list[left_key_index_list[0]]->type()) + ">";
+      }
       hash_map_define_str =
           "std::make_shared<" + hash_map_type_str + ">(ctx_->memory_pool());";
     }

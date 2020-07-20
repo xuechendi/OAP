@@ -175,6 +175,8 @@ endif()
 set(CODEGEN_HEADERS
     third_party/
     )
+set(THIRD_PARTY_INCLUDE ${CMAKE_CURRENT_SOURCE_DIR}/third_party)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR} ${THIRD_PARTY_INCLUDE})
 file(MAKE_DIRECTORY ${root_directory}/releases/include)
 file(MAKE_DIRECTORY ${root_directory}/releases/include/codegen/common/)
 file(MAKE_DIRECTORY ${root_directory}/releases/include/codegen/third_party/)
@@ -219,31 +221,31 @@ file(MAKE_DIRECTORY ${root_directory}/releases)
 add_library(spark_columnar_jni SHARED ${SPARK_COLUMNAR_PLUGIN_SRCS})
 add_dependencies(spark_columnar_jni jni_proto)
 
-file(MAKE_DIRECTORY ${root_directory}/releases/lib)
-set(PRECOMPILE_LIB
-        precompile/hash_map.cc
-        precompile/builder.cc
-        precompile/array.cc
-        precompile/type.cc
-        precompile/sort.cc
-        precompile/hash_arrays_kernel.cc
-)
-add_library(spark_columnar_precompile SHARED ${PRECOMPILE_LIB})
-set(THIRD_PARTY_INCLUDE ${CMAKE_CURRENT_SOURCE_DIR}/third_party)
-include_directories(${CMAKE_CURRENT_SOURCE_DIR} ${THIRD_PARTY_INCLUDE})
-get_property(dirs DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY INCLUDE_DIRECTORIES)
-foreach(dir ${dirs})
-  message(STATUS "dir='${dir}'")
-endforeach()
-target_include_directories(spark_columnar_precompile PUBLIC ${CMAKE_SYSTEM_INCLUDE_PATH} ${source_root_directory})
-target_link_libraries(spark_columnar_precompile
-                      LINK_PUBLIC ${ARROW_LIB} )
-set_target_properties(spark_columnar_precompile PROPERTIES
-                      LIBRARY_OUTPUT_DIRECTORY ${root_directory}/releases
-)
-set_target_properties(spark_columnar_precompile PROPERTIES
-                      LIBRARY_OUTPUT_DIRECTORY ${root_directory}/releases/lib
-                      )
+#file(MAKE_DIRECTORY ${root_directory}/releases/lib)
+#set(PRECOMPILE_LIB
+#        precompile/hash_map.cc
+#        precompile/builder.cc
+#        precompile/array.cc
+#        precompile/type.cc
+#        precompile/sort.cc
+#        precompile/hash_arrays_kernel.cc
+#)
+#add_library(spark_columnar_precompile SHARED ${PRECOMPILE_LIB})
+#set(THIRD_PARTY_INCLUDE ${CMAKE_CURRENT_SOURCE_DIR}/third_party)
+#include_directories(${CMAKE_CURRENT_SOURCE_DIR} ${THIRD_PARTY_INCLUDE})
+#get_property(dirs DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY INCLUDE_DIRECTORIES)
+#foreach(dir ${dirs})
+#  message(STATUS "dir='${dir}'")
+#endforeach()
+#target_include_directories(spark_columnar_precompile PUBLIC ${CMAKE_SYSTEM_INCLUDE_PATH} ${source_root_directory})
+#target_link_libraries(spark_columnar_precompile
+#                      LINK_PUBLIC ${ARROW_LIB} )
+#set_target_properties(spark_columnar_precompile PROPERTIES
+#                      LIBRARY_OUTPUT_DIRECTORY ${root_directory}/releases
+#)
+#set_target_properties(spark_columnar_precompile PROPERTIES
+#                      LIBRARY_OUTPUT_DIRECTORY ${root_directory}/releases/lib
+#                     )
 
 if(BUILD_PROTOBUF)
 target_link_libraries(spark_columnar_jni

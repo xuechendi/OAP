@@ -68,8 +68,8 @@ class SortArraysToIndicesKernel::Impl {
     std::stringstream func_args_ss;
     func_args_ss << "[Sorter]" << (nulls_first_ ? "nulls_first" : "nulls_last") << "|"
                  << (asc_ ? "asc" : "desc");
-    int i = 0;
-    for (auto field : key_field_list) {
+    for (auto i : key_index_list_) {
+      auto field = result_schema->field(i);
       func_args_ss << "[sort_key_" << i << "]" << field->type()->ToString();
     }
 

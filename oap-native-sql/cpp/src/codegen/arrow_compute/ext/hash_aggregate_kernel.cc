@@ -281,8 +281,13 @@ class HashAggregateKernel::Impl {
     std::string evaluate_get_typed_key_array_str;
     std::string evaluate_get_typed_key_method_str;
     if (!multiple_cols) {
-      hash_map_type_str = GetTypeString(key_list_[0].first->type(), "") + "HashMap";
-      hash_map_include_str = R"(#include "precompile/hash_map.h")";
+      if (key_list_[0].first->type()->id() == arrow::Type::STRING) {
+        hash_map_type_str = GetTypeString(key_list_[0].first->type(), "") + "HashMap";
+        hash_map_include_str = R"(#include "precompile/hash_map.h")";
+      } else {
+        hash_map_type_str =
+            "SparseHashMap<" + GetCTypeString(key_list_[0].first->type()) + ">";
+      }
       hash_map_define_str =
           "std::make_shared<" + hash_map_type_str + ">(ctx_->memory_pool());";
       evaluate_get_typed_key_array_str =
