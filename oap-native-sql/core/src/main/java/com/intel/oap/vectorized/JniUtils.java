@@ -66,9 +66,13 @@ public class JniUtils {
 
   private JniUtils(String _tmp_dir) throws IOException, IllegalAccessException, IllegalStateException {
     if (!isLoaded) {
-      Path folder = Paths.get(_tmp_dir);
-      Path path = Files.createTempDirectory(folder, "spark_columnar_plugin_");
-      tmp_dir = path.toAbsolutePath().toString();
+      if (_tmp_dir.contains("nativesql")) {
+        tmp_dir = _tmp_dir;
+      } else {
+        Path folder = Paths.get(_tmp_dir);
+        Path path = Files.createTempDirectory(folder, "spark_columnar_plugin_");
+        tmp_dir = path.toAbsolutePath().toString();
+      }
       try {
         loadLibraryFromJar(tmp_dir);
       } catch (IOException ex) {
@@ -102,10 +106,10 @@ public class JniUtils {
     synchronized (JniUtils.class) {
       if (tmp_dir == null) {
         tmp_dir = System.getProperty("java.io.tmpdir");
-        System.out.println("loadLibraryFromJar " + tmp_dir);
       }
       final String libraryToLoad = System.mapLibraryName(LIBRARY_NAME);
       final File libraryFile = moveFileFromJarToTemp(tmp_dir, libraryToLoad);
+      System.out.println("loadLibraryFromJar " + libraryFile.getAbsolutePath());
       System.load(libraryFile.getAbsolutePath());
     }
   }
@@ -157,6 +161,10 @@ public class JniUtils {
 
   private static File moveFileFromJarToTemp(String tmpDir, String libraryToLoad) throws IOException {
     // final File temp = File.createTempFile(tmpDir, libraryToLoad);
+    Path lib_path = Paths.get(tmpDir + "/" + libraryToLoad);
+    if (Files.exists(lib_path)) {
+      return new File(tmpDir + "/" + libraryToLoad);
+    }
     final File temp = new File(tmpDir + "/" + libraryToLoad);
     try (final InputStream is = JniUtils.class.getClassLoader().getResourceAsStream(libraryToLoad)) {
       if (is == null) {
@@ -180,6 +188,10 @@ public class JniUtils {
       if (((jarDir == "" && !entry.getName().contains("META-INF")) || (entry.getName().startsWith(jarDir + "/")))
           && !entry.isDirectory()) {
         int rm_length = jarDir.length() == 0 ? 0 : jarDir.length() + 1;
+        Path dest_path = Paths.get(destDir + "/" + entry.getName().substring(rm_length));
+        if (Files.exists(dest_path)) {
+          continue;
+        }
         File dest = new File(destDir + "/" + entry.getName().substring(rm_length));
         File parent = dest.getParentFile();
         if (parent != null) {
