@@ -132,8 +132,12 @@ class ActionCodeGen {
     return str;
   }
   std::string GetTypedVectorDefineString(std::shared_ptr<arrow::DataType> type,
-                                         std::string name) {
-    return "std::vector<" + GetCTypeString(type) + "> " + name;
+                                         std::string name, bool use_ref = false) {
+    if (use_ref) {
+      return "const std::vector<" + GetCTypeString(type) + ">& " + name;
+    } else {
+      return "std::vector<" + GetCTypeString(type) + "> " + name;
+    }
   }
 
   void GetTypedArrayCastString(std::shared_ptr<arrow::DataType> type, std::string name) {
@@ -248,7 +252,7 @@ class GroupByActionCodeGen : public ActionCodeGen {
 
     finish_variable_list_.push_back(sig_name);
     finish_var_parameter_codes_list_.push_back(
-        GetTypedVectorDefineString(data_type, sig_name + "_vector_tmp"));
+        GetTypedVectorDefineString(data_type, sig_name + "_vector_tmp", true));
     finish_var_define_codes_list_.push_back(
         GetTypedVectorAndBuilderDefineString(data_type, sig_name));
     finish_var_prepare_codes_list_.push_back(
@@ -328,7 +332,7 @@ class SumActionCodeGen : public ActionCodeGen {
 
     finish_variable_list_.push_back(sig_name);
     finish_var_parameter_codes_list_.push_back(
-        GetTypedVectorDefineString(data_type, sig_name + "_vector_tmp"));
+        GetTypedVectorDefineString(data_type, sig_name + "_vector_tmp", true));
     finish_var_define_codes_list_.push_back(
         GetTypedVectorAndBuilderDefineString(data_type, sig_name));
     finish_var_prepare_codes_list_.push_back(
@@ -376,7 +380,7 @@ class CountActionCodeGen : public ActionCodeGen {
 
     finish_variable_list_.push_back(sig_name);
     finish_var_parameter_codes_list_.push_back(
-        GetTypedVectorDefineString(data_type, sig_name + "_vector_tmp"));
+        GetTypedVectorDefineString(data_type, sig_name + "_vector_tmp", true));
     finish_var_define_codes_list_.push_back(
         GetTypedVectorAndBuilderDefineString(data_type, sig_name));
     finish_var_prepare_codes_list_.push_back(
@@ -414,7 +418,7 @@ class CountLiteralActionCodeGen : public ActionCodeGen {
 
     finish_variable_list_.push_back(sig_name);
     finish_var_parameter_codes_list_.push_back(
-        GetTypedVectorDefineString(data_type, sig_name + "_vector_tmp"));
+        GetTypedVectorDefineString(data_type, sig_name + "_vector_tmp", true));
     finish_var_define_codes_list_.push_back(
         GetTypedVectorAndBuilderDefineString(data_type, sig_name));
     finish_var_prepare_codes_list_.push_back(
@@ -437,15 +441,17 @@ class SumCountActionCodeGen : public ActionCodeGen {
                         std::shared_ptr<gandiva::Expression> projector) {
     is_key_ = false;
     std::string sig_name;
-    std::shared_ptr<arrow::DataType> data_type = arrow::float64();
+    std::shared_ptr<arrow::DataType> data_type;
     if (projector) {
       // if projection pre-defined, use projection input
       auto _name = projector->result()->name();
+      data_type = projector->result()->type();
       sig_name = "action_sum_" + _name + "_";
       projector_expr_ = projector;
       GetTypedArrayCastByNameString(data_type, _name);
     } else {
       sig_name = "action_sum_" + name + "_";
+      data_type = input_fields_list[0]->type();
       GetTypedArrayCastString(data_type, input_list[0]);
     }
     func_sig_list_.push_back(sig_name);
@@ -475,7 +481,7 @@ class SumCountActionCodeGen : public ActionCodeGen {
 
     finish_variable_list_.push_back(sig_name);
     finish_var_parameter_codes_list_.push_back(
-        GetTypedVectorDefineString(data_type, sig_name + "_vector_tmp"));
+        GetTypedVectorDefineString(data_type, sig_name + "_vector_tmp", true));
     finish_var_define_codes_list_.push_back(
         GetTypedVectorAndBuilderDefineString(data_type, sig_name));
     finish_var_prepare_codes_list_.push_back(
@@ -511,7 +517,7 @@ class SumCountActionCodeGen : public ActionCodeGen {
 
     finish_variable_list_.push_back(sig_name);
     finish_var_parameter_codes_list_.push_back(
-        GetTypedVectorDefineString(data_type, sig_name + "_vector_tmp"));
+        GetTypedVectorDefineString(data_type, sig_name + "_vector_tmp", true));
     finish_var_define_codes_list_.push_back(
         GetTypedVectorAndBuilderDefineString(data_type, sig_name));
     finish_var_prepare_codes_list_.push_back(
@@ -602,7 +608,7 @@ class AvgByCountActionCodeGen : public ActionCodeGen {
 
     finish_variable_list_.push_back(sig_name);
     finish_var_parameter_codes_list_.push_back(
-        GetTypedVectorDefineString(data_type, sig_name + "_vector_tmp"));
+        GetTypedVectorDefineString(data_type, sig_name + "_vector_tmp", true));
     finish_var_define_codes_list_.push_back(
         GetTypedVectorAndBuilderDefineString(data_type, sig_name));
     finish_var_prepare_codes_list_.push_back(
@@ -667,7 +673,7 @@ class MaxActionCodeGen : public ActionCodeGen {
 
     finish_variable_list_.push_back(sig_name);
     finish_var_parameter_codes_list_.push_back(
-        GetTypedVectorDefineString(data_type, sig_name + "_vector_tmp"));
+        GetTypedVectorDefineString(data_type, sig_name + "_vector_tmp", true));
     finish_var_define_codes_list_.push_back(
         GetTypedVectorAndBuilderDefineString(data_type, sig_name));
     finish_var_prepare_codes_list_.push_back(
@@ -732,7 +738,7 @@ class MinActionCodeGen : public ActionCodeGen {
 
     finish_variable_list_.push_back(sig_name);
     finish_var_parameter_codes_list_.push_back(
-        GetTypedVectorDefineString(data_type, sig_name + "_vector_tmp"));
+        GetTypedVectorDefineString(data_type, sig_name + "_vector_tmp", true));
     finish_var_define_codes_list_.push_back(
         GetTypedVectorAndBuilderDefineString(data_type, sig_name));
     finish_var_prepare_codes_list_.push_back(
@@ -826,7 +832,7 @@ class AvgActionCodeGen : public ActionCodeGen {
 
     finish_variable_list_.push_back(sig_name);
     finish_var_parameter_codes_list_.push_back(
-        GetTypedVectorDefineString(data_type, sig_name + "_vector_tmp"));
+        GetTypedVectorDefineString(data_type, sig_name + "_vector_tmp", true));
     finish_var_define_codes_list_.push_back(
         GetTypedVectorAndBuilderDefineString(data_type, sig_name));
     finish_var_prepare_codes_list_.push_back(
