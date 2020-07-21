@@ -26,6 +26,8 @@ import java.net.JarURLConnection;
 import java.net.URL;
 import java.net.URLConnection;
 import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Enumeration;
@@ -62,8 +64,11 @@ public class JniUtils {
     return INSTANCE;
   }
 
-  private JniUtils(String tmp_dir) throws IOException, IllegalAccessException, IllegalStateException {
+  private JniUtils(String _tmp_dir) throws IOException, IllegalAccessException, IllegalStateException {
     if (!isLoaded) {
+      Path folder = Paths.get(_tmp_dir);
+      Path path = Files.createTempDirectory(folder, "spark_columnar_plugin_");
+      tmp_dir = path.toAbsolutePath().toString();
       try {
         loadLibraryFromJar(tmp_dir);
       } catch (IOException ex) {
@@ -73,12 +78,15 @@ public class JniUtils {
     }
   }
 
-  public void setTempDir(String _tmp_dir) throws IOException, IllegalAccessException {
+  public void setTempDir() throws IOException, IllegalAccessException {
     if (isCodegenDependencyLoaded == false) {
-      tmp_dir = _tmp_dir;
       loadIncludeFromJar(tmp_dir);
       isCodegenDependencyLoaded = true;
     }
+  }
+
+  public String getTempDir() {
+    return tmp_dir;
   }
 
   public void setJars(List<String> list_jars) throws IOException, IllegalAccessException {

@@ -85,7 +85,7 @@ class ColumnarSortExec(
     }
   val listJars = if (signature != "") {
     if (sparkContext.listJars.filter(path => path.contains(s"${signature}.jar")).isEmpty) {
-      val tempDir = ColumnarPluginConfig.getTempFile
+      val tempDir = ColumnarPluginConfig.getRandomTempDir
       val jarFileName =
         s"${tempDir}/tmp/spark-columnar-plugin-codegen-precompile-${signature}.jar"
       sparkContext.addJar(jarFileName)
