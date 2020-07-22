@@ -109,7 +109,6 @@ public class JniUtils {
       }
       final String libraryToLoad = System.mapLibraryName(LIBRARY_NAME);
       final File libraryFile = moveFileFromJarToTemp(tmp_dir, libraryToLoad);
-      System.out.println("loadLibraryFromJar " + libraryFile.getAbsolutePath());
       System.load(libraryFile.getAbsolutePath());
     }
   }
@@ -118,7 +117,6 @@ public class JniUtils {
     synchronized (JniUtils.class) {
       if (tmp_dir == null) {
         tmp_dir = System.getProperty("java.io.tmpdir");
-        System.out.println("loadLibraryFromJar " + tmp_dir);
       }
       final String folderToLoad = "";
       URL url = new URL("jar:file:" + source_jar + "!/");
@@ -146,7 +144,6 @@ public class JniUtils {
     synchronized (JniUtils.class) {
       if (tmp_dir == null) {
         tmp_dir = System.getProperty("java.io.tmpdir");
-        System.out.println("loadIncludeFromJar " + tmp_dir);
       }
       final String folderToLoad = "include";
       final URLConnection urlConnection = JniUtils.class.getClassLoader().getResource("include").openConnection();

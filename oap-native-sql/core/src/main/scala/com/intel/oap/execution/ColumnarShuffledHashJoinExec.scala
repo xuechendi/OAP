@@ -118,7 +118,7 @@ class ColumnarShuffledHashJoinExec(
   } else {
     List()
   }
-  listJars.foreach(jar => logWarning(s"Uploaded ${jar}"))
+  listJars.foreach(jar => logInfo(s"Uploaded ${jar}"))
 
   override def doExecuteColumnar(): RDD[ColumnarBatch] = {
     streamedPlan.executeColumnar().zipPartitions(buildPlan.executeColumnar()) {
