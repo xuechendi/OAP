@@ -34,8 +34,12 @@ import org.apache.spark.sql.execution.adaptive.{
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
-import org.apache.spark.sql.execution.exchange.{ReusedExchangeExec, ShuffleExchangeExec}
-import org.apache.spark.sql.execution.joins.ShuffledHashJoinExec
+import org.apache.spark.sql.execution.exchange.{
+  BroadcastExchangeExec,
+  ReusedExchangeExec,
+  ShuffleExchangeExec
+}
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, ShuffledHashJoinExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.{SparkSession, SparkSessionExtensions}
 import java.io.IOException
@@ -122,6 +126,24 @@ case class ColumnarPreOverrides(conf: SparkConf) extends Rule[SparkPlan] {
         plan.condition,
         left,
         right)
+      res
+    case plan: BroadcastHashJoinExec =>
+      val left = replaceWithColumnarPlan(plan.left)
+      val right = replaceWithColumnarPlan(plan.right)
+      logDebug(s"Columnar Processing for ${plan.getClass} is currently supported.")
+      val res = new ColumnarBroadcastHashJoinExec(
+        plan.leftKeys,
+        plan.rightKeys,
+        plan.joinType,
+        plan.buildSide,
+        plan.condition,
+        left,
+        right)
+      res
+    case plan: BroadcastExchangeExec =>
+      val child = replaceWithColumnarPlan(plan.child)
+      logDebug(s"Columnar Processing for ${plan.getClass} is currently supported.")
+      val res = new ColumnarBroadcastExchangeExec(plan.mode, child)
       res
     case plan: ShuffleQueryStageExec if columnarConf.enableColumnarShuffle =>
       // To catch the case when AQE enabled and there's no wrapped CustomShuffleReaderExec,
