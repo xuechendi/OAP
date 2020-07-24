@@ -80,6 +80,7 @@ class ColumnarBroadcastHashJoinExec(
   val sparkConf = sparkContext.getConf
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
+    "totalTime" -> SQLMetrics.createTimingMetric(sparkContext, "totaltime_broadcastHasedJoin"),
     "fetchTime" -> SQLMetrics.createTimingMetric(sparkContext, "time to fetch buildSide batch"),
     "buildTime" -> SQLMetrics.createTimingMetric(sparkContext, "time to build hash map"),
     "joinTime" -> SQLMetrics.createTimingMetric(sparkContext, "join time"))
@@ -88,6 +89,7 @@ class ColumnarBroadcastHashJoinExec(
   override def supportCodegen: Boolean = false
 
   val numOutputRows = longMetric("numOutputRows")
+  val totalTime = longMetric("totalTime")
   val joinTime = longMetric("joinTime")
   val buildTime = longMetric("buildTime")
   val fetchTime = longMetric("fetchTime")
@@ -118,7 +120,7 @@ class ColumnarBroadcastHashJoinExec(
     }
   val listJars = if (signature != "") {
     if (sparkContext.listJars.filter(path => path.contains(s"${signature}.jar")).isEmpty) {
-      val tempDir = ColumnarPluginConfig.getTempFile
+      val tempDir = ColumnarPluginConfig.getRandomTempDir
       val jarFileName =
         s"${tempDir}/tmp/spark-columnar-plugin-codegen-precompile-${signature}.jar"
       sparkContext.addJar(jarFileName)
@@ -157,12 +159,14 @@ class ColumnarBroadcastHashJoinExec(
         jarList,
         buildTime,
         joinTime,
+        totalTime,
         numOutputRows,
         sparkConf)
       TaskContext
         .get()
         .addTaskCompletionListener[Unit](_ => {
           vjoin.close()
+          totalTime.merge(fetchTime)
         })
       val beforeFetch = System.nanoTime()
       val buildIter =

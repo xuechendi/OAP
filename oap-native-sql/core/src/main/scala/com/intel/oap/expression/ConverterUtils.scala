@@ -124,35 +124,43 @@ object ConverterUtils extends Logging {
   def convertFromNetty(data: Array[Array[Byte]]): Iterator[ColumnarBatch] = {
     new Iterator[ColumnarBatch] {
       var array_id = 0
+      var incorrectInput = false
       var input = new ByteArrayInputStream(data(array_id))
       var reader = new ArrowStreamReader(input, ArrowWritableColumnVector.getNewAllocator)
       var root = reader.getVectorSchemaRoot()
 
-      override def hasNext: Boolean = array_id < (data.size - 1) || input.available > 0
+      override def hasNext: Boolean =
+        (array_id < (data.size - 1) || input.available > 0) && (!incorrectInput)
       override def next(): ColumnarBatch = {
-        if (input.available == 0) {
-          array_id += 1
-          input = new ByteArrayInputStream(data(array_id))
-          reader = new ArrowStreamReader(input, ArrowWritableColumnVector.getNewAllocator)
-          root = reader.getVectorSchemaRoot()
-        }
-        reader.loadNextBatch();
-        val length = root.getRowCount
-        val vectors = root
-          .getFieldVectors()
-          .asScala
-          .zipWithIndex
-          .map {
-            case (vector, i) => {
-              new ArrowWritableColumnVector(vector, i, length, false)
-            }
+        try {
+          if (input.available == 0) {
+            array_id += 1
+            input = new ByteArrayInputStream(data(array_id))
+            reader = new ArrowStreamReader(input, ArrowWritableColumnVector.getNewAllocator)
+            root = reader.getVectorSchemaRoot()
           }
-          .toArray[ColumnVector]
-        val numCols = vectors.size
-        /*logWarning(s"numRows is $length, data is ${(0 until length).map(i =>
+          reader.loadNextBatch();
+          val length = root.getRowCount
+          val vectors = root
+            .getFieldVectors()
+            .asScala
+            .zipWithIndex
+            .map {
+              case (vector, i) => {
+                new ArrowWritableColumnVector(vector, i, length, false)
+              }
+            }
+            .toArray[ColumnVector]
+          val numCols = vectors.size
+          /*logWarning(s"numRows is $length, data is ${(0 until length).map(i =>
           (0 until numCols).map(j =>
             vectors(j).asInstanceOf[ArrowWritableColumnVector].getUTF8String(i)))}")*/
-        new ColumnarBatch(vectors, length)
+          new ColumnarBatch(vectors, length)
+        } catch {
+          case e: java.io.IOException =>
+            incorrectInput = true
+            null
+        }
       }
     }
   }

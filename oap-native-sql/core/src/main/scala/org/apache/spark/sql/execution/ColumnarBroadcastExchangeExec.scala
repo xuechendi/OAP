@@ -26,6 +26,7 @@ class ColumnarBroadcastExchangeExec(mode: BroadcastMode, child: SparkPlan)
   override lazy val metrics = Map(
     "dataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size"),
     "numRows" -> SQLMetrics.createMetric(sparkContext, "number of Rows"),
+    "totalTime" -> SQLMetrics.createTimingMetric(sparkContext, "totaltime_broadcastExchange"),
     "collectTime" -> SQLMetrics.createTimingMetric(sparkContext, "time to collect"),
     "buildTime" -> SQLMetrics.createTimingMetric(sparkContext, "time to build"),
     "broadcastTime" -> SQLMetrics.createTimingMetric(sparkContext, "time to broadcast"))
@@ -92,6 +93,8 @@ class ColumnarBroadcastExchangeExec(mode: BroadcastMode, child: SparkPlan)
         // Broadcast the relation
         val broadcasted = sparkContext.broadcast(relation)
         longMetric("broadcastTime") += NANOSECONDS.toMillis(System.nanoTime() - beforeBroadcast)
+        longMetric("totalTime").merge(longMetric("collectTime"))
+        longMetric("totalTime").merge(longMetric("broadcastTime"))
         val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
         SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, metrics.values.toSeq)
         promise.success(broadcasted)

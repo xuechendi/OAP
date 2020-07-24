@@ -89,7 +89,6 @@ class ColumnarShuffledHashJoin(
       (0 until build_cb.numCols).toList.foreach(i =>
         build_cb.column(i).asInstanceOf[ArrowWritableColumnVector].retain())
       inputBatchHolder += build_cb
-      val beforeBuild = System.nanoTime()
       prober.evaluate(build_rb)
       _buildTime += NANOSECONDS.toMillis(System.nanoTime() - beforeBuild)
       ConverterUtils.releaseArrowRecordBatch(build_rb)
