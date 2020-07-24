@@ -128,23 +128,35 @@ case class ColumnarPreOverrides(conf: SparkConf) extends Rule[SparkPlan] {
         right)
       res
     case plan: BroadcastHashJoinExec =>
-      val left = replaceWithColumnarPlan(plan.left)
-      val right = replaceWithColumnarPlan(plan.right)
-      logDebug(s"Columnar Processing for ${plan.getClass} is currently supported.")
-      val res = new ColumnarBroadcastHashJoinExec(
-        plan.leftKeys,
-        plan.rightKeys,
-        plan.joinType,
-        plan.buildSide,
-        plan.condition,
-        left,
-        right)
-      res
-    case plan: BroadcastExchangeExec =>
-      val child = replaceWithColumnarPlan(plan.child)
-      logDebug(s"Columnar Processing for ${plan.getClass} is currently supported.")
-      val res = new ColumnarBroadcastExchangeExec(plan.mode, child)
-      res
+      if (!SQLConf.get.adaptiveExecutionEnabled && columnarConf.enableColumnarBroadcastJoin) {
+        val left = if (plan.left.isInstanceOf[BroadcastExchangeExec]) {
+          val child = plan.left.asInstanceOf[BroadcastExchangeExec]
+          new ColumnarBroadcastExchangeExec(child.mode, replaceWithColumnarPlan(child.child))
+        } else {
+          replaceWithColumnarPlan(plan.left)
+        }
+        val right = if (plan.right.isInstanceOf[BroadcastExchangeExec]) {
+          val child = plan.right.asInstanceOf[BroadcastExchangeExec]
+          new ColumnarBroadcastExchangeExec(child.mode, replaceWithColumnarPlan(child.child))
+        } else {
+          replaceWithColumnarPlan(plan.right)
+        }
+        logDebug(s"Columnar Processing for ${plan.getClass} is currently supported.")
+        val res = new ColumnarBroadcastHashJoinExec(
+          plan.leftKeys,
+          plan.rightKeys,
+          plan.joinType,
+          plan.buildSide,
+          plan.condition,
+          left,
+          right)
+        res
+      } else {
+        val children = plan.children.map(replaceWithColumnarPlan)
+        logDebug(s"Columnar Processing for ${plan.getClass} is not currently supported.")
+        plan.withNewChildren(children)
+      }
+
     case plan: ShuffleQueryStageExec if columnarConf.enableColumnarShuffle =>
       // To catch the case when AQE enabled and there's no wrapped CustomShuffleReaderExec,
       // and don't call replaceWithColumnarPlan because ShuffleQueryStageExec is a leaf node
