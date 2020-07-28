@@ -34,6 +34,10 @@ class ColumnarBroadcastExchangeExec(mode: BroadcastMode, child: SparkPlan)
   private lazy val promise = Promise[broadcast.Broadcast[Any]]()
 
   @transient
+  override lazy val completionFuture: scala.concurrent.Future[broadcast.Broadcast[Any]] =
+    promise.future
+
+  @transient
   private[sql] override lazy val relationFuture
       : java.util.concurrent.Future[broadcast.Broadcast[Any]] = {
     SQLExecution.withThreadLocalCaptured[broadcast.Broadcast[Any]](

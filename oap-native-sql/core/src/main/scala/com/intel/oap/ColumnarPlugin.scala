@@ -127,8 +127,9 @@ case class ColumnarPreOverrides(conf: SparkConf) extends Rule[SparkPlan] {
         left,
         right)
       res
+
     case plan: BroadcastHashJoinExec =>
-      if (!SQLConf.get.adaptiveExecutionEnabled && columnarConf.enableColumnarBroadcastJoin) {
+      if (columnarConf.enableColumnarBroadcastJoin) {
         val left = if (plan.left.isInstanceOf[BroadcastExchangeExec]) {
           val child = plan.left.asInstanceOf[BroadcastExchangeExec]
           new ColumnarBroadcastExchangeExec(child.mode, replaceWithColumnarPlan(child.child))
