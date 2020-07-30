@@ -167,8 +167,7 @@ object ColumnarExpressionConverter extends Logging {
         replaceWithColumnarExpression(r.scale),
         expr)
     case expr =>
-      logWarning(s"${expr.getClass} ${expr} is not currently supported.")
-      expr
+      throw new UnsupportedOperationException(s"${expr.getClass} ${expr} is not currently supported.")
   }
 
   def ifNoCalculation = check_if_no_calculation

@@ -47,50 +47,25 @@ import io.netty.buffer.ArrowBuf
 import scala.collection.JavaConverters._
 
 class ColumnarConditionProjector(
-  condExpr: Expression,
-  projectList: Seq[Expression],
+  condPrepareList: (TreeNode, ArrowType),
+  conditionFieldList: java.util.List[Field],
+  var projPrepareList: Seq[(ExpressionTree, ArrowType)],
+  var projectFieldList: java.util.List[Field],
   originalInputAttributes: Seq[Attribute],
   numInputBatches: SQLMetric,
   numOutputBatches: SQLMetric,
   numOutputRows: SQLMetric,
   procTime: SQLMetric)
   extends Logging {
-  logInfo(s"originalInputAttributes is ${originalInputAttributes}, \nCondition is ${condExpr}, \nProjection is ${projectList}")
   var proc_time :Long = 0
   var elapseTime_make: Long = 0
   val start_make: Long = System.nanoTime()
   var skip = false
   var selectionBuffer : ArrowBuf = null
 
-  val conditionInputList : java.util.List[Field] = Lists.newArrayList()
-  val condPrepareList: (TreeNode, ArrowType) = if (condExpr != null) {
-    val columnarCondExpr: Expression = ColumnarExpressionConverter.replaceWithColumnarExpression(condExpr, originalInputAttributes)
-    val (cond, resultType) =
-      columnarCondExpr.asInstanceOf[ColumnarExpression].doColumnarCodeGen(conditionInputList)
-    (cond, resultType)
-  } else {
-    null
-  }
-  //Collections.sort(conditionFieldList, (l: Field, r: Field) => { l.getName.compareTo(r.getName)})
-  val conditionFieldList = conditionInputList.asScala.toList.distinct.asJava;
   val conditionOrdinalList: List[Int] = conditionFieldList.asScala.toList.map(field => {
     field.getName.replace("c_", "").toInt
   })
-
-  var projectInputList : java.util.List[Field] = Lists.newArrayList()
-  var projPrepareList : Seq[(ExpressionTree, ArrowType)] = null
-  if (projectList != null) {
-    val columnarProjExprs: Seq[Expression] = projectList.map(expr => {
-      ColumnarExpressionConverter.replaceWithColumnarExpression(expr, originalInputAttributes)
-    })
-    projPrepareList = columnarProjExprs.map(columnarExpr => {
-      val (node, resultType) =
-        columnarExpr.asInstanceOf[ColumnarExpression].doColumnarCodeGen(projectInputList)
-      val result = Field.nullable("result", resultType)
-      (TreeBuilder.makeExpression(node, result), resultType)
-    })
-  }
-  var projectFieldList = projectInputList.asScala.toList.distinct.asJava;
 
   if (projectFieldList.size == 0) { 
     if (conditionFieldList.size > 0) {
@@ -239,7 +214,7 @@ class ColumnarConditionProjector(
               conditioner.evaluate(input, selectionVector)
               ConverterUtils.releaseArrowRecordBatch(input)
               numRows = selectionVector.getRecordCount()
-              if (projectList == null && numRows == columnarBatch.numRows()) {
+              if (projPrepareList == null && numRows == columnarBatch.numRows()) {
                 logInfo("No projection and conditioned row number is as same as original row number. Directly use original ColumnarBatch")
                 resColumnarBatch = columnarBatch
                 (0 until resColumnarBatch.numCols).toList.foreach(i => resColumnarBatch.column(i).asInstanceOf[ArrowWritableColumnVector].retain())
@@ -294,18 +269,66 @@ class ColumnarConditionProjector(
 
 }// end of class
 
-object ColumnarConditionProjector {
+object ColumnarConditionProjector extends Logging {
+  var condPrepareList: (TreeNode, ArrowType) = null
+  var conditionFieldList: java.util.List[Field] = null
+
+  var projPrepareList: Seq[(ExpressionTree, ArrowType)] = null
+  var projectFieldList: java.util.List[Field] = null
+
+  def init(
+      condExpr: Expression,
+      projectList: Seq[Expression],
+      originalInputAttributes: Seq[Attribute]): Unit = {
+    logInfo(
+      s"originalInputAttributes is ${originalInputAttributes}, \nCondition is ${condExpr}, \nProjection is ${projectList}")
+    val conditionInputList: java.util.List[Field] = Lists.newArrayList()
+    condPrepareList = if (condExpr != null) {
+      val columnarCondExpr: Expression = ColumnarExpressionConverter
+        .replaceWithColumnarExpression(condExpr, originalInputAttributes)
+      val (cond, resultType) =
+        columnarCondExpr.asInstanceOf[ColumnarExpression].doColumnarCodeGen(conditionInputList)
+      (cond, resultType)
+    } else {
+      null
+    }
+    //Collections.sort(conditionFieldList, (l: Field, r: Field) => { l.getName.compareTo(r.getName)})
+    conditionFieldList = conditionInputList.asScala.toList.distinct.asJava;
+
+    var projectInputList: java.util.List[Field] = Lists.newArrayList()
+    if (projectList != null) {
+      val columnarProjExprs: Seq[Expression] = projectList.map(expr => {
+        ColumnarExpressionConverter.replaceWithColumnarExpression(expr, originalInputAttributes)
+      })
+      projPrepareList = columnarProjExprs.map(columnarExpr => {
+        val (node, resultType) =
+          columnarExpr.asInstanceOf[ColumnarExpression].doColumnarCodeGen(projectInputList)
+        val result = Field.nullable("result", resultType)
+        (TreeBuilder.makeExpression(node, result), resultType)
+      })
+    }
+    projectFieldList = projectInputList.asScala.toList.distinct.asJava;
+  }
+  def prebuild(
+      condition: Expression,
+      projectList: Seq[Expression],
+      inputSchema: Seq[Attribute]): Unit = {
+    init(condition, projectList, inputSchema)
+  }
   def create(
-    condition: Expression,
-    projectList: Seq[Expression],
-    inputSchema: Seq[Attribute],
-    numInputBatches: SQLMetric,
-    numOutputBatches: SQLMetric,
-    numOutputRows: SQLMetric,
-    procTime: SQLMetric): ColumnarConditionProjector = synchronized {
+      condition: Expression,
+      projectList: Seq[Expression],
+      inputSchema: Seq[Attribute],
+      numInputBatches: SQLMetric,
+      numOutputBatches: SQLMetric,
+      numOutputRows: SQLMetric,
+      procTime: SQLMetric): ColumnarConditionProjector = synchronized {
+    init(condition, projectList, inputSchema)
     new ColumnarConditionProjector(
-      condition,
-      projectList,
+      condPrepareList,
+      conditionFieldList,
+      projPrepareList,
+      projectFieldList,
       inputSchema,
       numInputBatches,
       numOutputBatches,
