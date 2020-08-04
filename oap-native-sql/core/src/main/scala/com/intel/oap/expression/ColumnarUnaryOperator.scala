@@ -158,6 +158,10 @@ class ColumnarCast(child: Expression, datatype: DataType, timeZoneId: Option[Str
       val limitLenNode = TreeBuilder.makeLiteral(limitLen)
       val funcNode =  TreeBuilder.makeFunction("castVARCHAR", Lists.newArrayList(child_node, limitLenNode), resultType)
       (funcNode, resultType)
+    } else if (dataType == ByteType) {
+      val funcNode =
+        TreeBuilder.makeFunction("castBYTE", Lists.newArrayList(child_node), resultType)
+      (funcNode, resultType)
     } else if (dataType == IntegerType) {
       val funcNode =
         TreeBuilder.makeFunction("castINT", Lists.newArrayList(child_node), resultType)
