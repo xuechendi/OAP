@@ -47,34 +47,37 @@ import io.netty.buffer.ArrowBuf
 import scala.collection.JavaConverters._
 
 class ColumnarConditionProjector(
-  condPrepareList: (TreeNode, ArrowType),
-  conditionFieldList: java.util.List[Field],
-  var projPrepareList: Seq[(ExpressionTree, ArrowType)],
-  var projectFieldList: java.util.List[Field],
-  originalInputAttributes: Seq[Attribute],
-  numInputBatches: SQLMetric,
-  numOutputBatches: SQLMetric,
-  numOutputRows: SQLMetric,
-  procTime: SQLMetric)
-  extends Logging {
-  var proc_time :Long = 0
+    condPrepareList: (TreeNode, ArrowType),
+    conditionFieldList: java.util.List[Field],
+    var projPrepareList: Seq[(ExpressionTree, ArrowType)],
+    var projectFieldList: java.util.List[Field],
+    var skip: Boolean,
+    originalInputAttributes: Seq[Attribute],
+    numInputBatches: SQLMetric,
+    numOutputBatches: SQLMetric,
+    numOutputRows: SQLMetric,
+    procTime: SQLMetric)
+    extends Logging {
+  var proc_time: Long = 0
   var elapseTime_make: Long = 0
   val start_make: Long = System.nanoTime()
-  var skip = false
-  var selectionBuffer : ArrowBuf = null
+  var selectionBuffer: ArrowBuf = null
+  if (projectFieldList.size == 0 && conditionFieldList.size == 0) {
+    skip = true
+  } else {
+    skip = false
+  }
 
   val conditionOrdinalList: List[Int] = conditionFieldList.asScala.toList.map(field => {
     field.getName.replace("c_", "").toInt
   })
 
-  if (projectFieldList.size == 0) { 
+  if (projectFieldList.size == 0) {
     if (conditionFieldList.size > 0) {
-      projectFieldList = originalInputAttributes.zipWithIndex.toList.map{case (attr, i) => 
-        Field.nullable(s"c_${i}", CodeGeneration.getResultType(attr.dataType))
+      projectFieldList = originalInputAttributes.zipWithIndex.toList.map {
+        case (attr, i) =>
+          Field.nullable(s"c_${i}", CodeGeneration.getResultType(attr.dataType))
       }.asJava
-    } else {
-      logInfo(s"skip this conditionprojection")
-      skip = true
     }
   }
   val projectOrdinalList: List[Int] = projectFieldList.asScala.toList.map(field => {
@@ -84,10 +87,9 @@ class ColumnarConditionProjector(
   val projectResultFieldList = if (projPrepareList != null) {
     projPrepareList.map(expr => Field.nullable(s"result", expr._2)).toList.asJava
   } else {
-    projPrepareList = 
-      projectFieldList.asScala.map(field => {
-        (TreeBuilder.makeExpression(TreeBuilder.makeField(field), field), field.getType)
-      })
+    projPrepareList = projectFieldList.asScala.map(field => {
+      (TreeBuilder.makeExpression(TreeBuilder.makeField(field), field), field.getType)
+    })
     projectFieldList
   }
 
@@ -96,7 +98,10 @@ class ColumnarConditionProjector(
   val projectionSchema = ArrowUtils.fromArrowSchema(projectionArrowSchema)
   val resultArrowSchema = new Schema(projectResultFieldList)
   val resultSchema = ArrowUtils.fromArrowSchema(resultArrowSchema)
-  logInfo(s"conditionArrowSchema is ${conditionArrowSchema}, conditionOrdinalList is ${conditionOrdinalList}, \nprojectionArrowSchema is ${projectionArrowSchema}, projectionOrinalList is ${projectOrdinalList}, \nresult schema is ${resultArrowSchema}")
+  if (skip) {
+    logWarning(
+      s"Will do skip!!!\nconditionArrowSchema is ${conditionArrowSchema}, conditionOrdinalList is ${conditionOrdinalList}, \nprojectionArrowSchema is ${projectionArrowSchema}, projectionOrinalList is ${projectOrdinalList}, \nresult schema is ${resultArrowSchema}")
+  }
 
   val conditioner = if (skip == false && condPrepareList != null) {
     createFilter(conditionArrowSchema, condPrepareList)
@@ -135,10 +140,18 @@ class ColumnarConditionProjector(
       return projector
     }
     val fieldNodesList = prepareList.map(_._1).toList.asJava
-    if (withCond) {
-      Projector.make(arrowSchema, fieldNodesList, SelectionVectorType.SV_INT16)
-    } else {
-      Projector.make(arrowSchema, fieldNodesList)
+    try {
+      if (withCond) {
+        Projector.make(arrowSchema, fieldNodesList, SelectionVectorType.SV_INT16)
+      } else {
+        Projector.make(arrowSchema, fieldNodesList)
+      }
+    } catch {
+      case e =>
+        logError(
+          s"\noriginalInputAttributes is ${originalInputAttributes} ${originalInputAttributes.map(
+            _.dataType)}, \narrowSchema is ${arrowSchema}, \nProjection is ${prepareList.map(_._1.toProtobuf)}")
+        throw e
     }
   }
 
@@ -175,8 +188,8 @@ class ColumnarConditionProjector(
         var beforeEval: Long = 0
         var afterEval: Long = 0
         var numRows = 0
-        var input : ArrowRecordBatch = null
-        var selectionVector : SelectionVectorInt16 = null
+        var input: ArrowRecordBatch = null
+        var selectionVector: SelectionVectorInt16 = null
         while (numRows == 0) {
 
           if (cbIterator.hasNext) {
@@ -190,12 +203,25 @@ class ColumnarConditionProjector(
           beforeEval = System.nanoTime()
           numRows = columnarBatch.numRows()
           if (numRows > 0) {
-            if (skip == true){
-              logInfo("Use original ColumnarBatch")
-              resColumnarBatch = columnarBatch
-              (0 until resColumnarBatch.numCols).toList.foreach(i => resColumnarBatch.column(i).asInstanceOf[ArrowWritableColumnVector].retain())
+            if (skip == true) {
+              resColumnarBatch = if (projectOrdinalList.size < columnarBatch.numCols) {
+                (0 until columnarBatch.numCols).toList.foreach(i =>
+                  columnarBatch.column(i).asInstanceOf[ArrowWritableColumnVector].retain())
+                // Since all these cols share same root, we need to retain them all or retained vector may be closed.
+                val cols = projectOrdinalList
+                  .map(i => {
+                    columnarBatch.column(i).asInstanceOf[ColumnVector]
+                  })
+                  .toArray
+                new ColumnarBatch(cols, numRows)
+              } else {
+                logInfo("Use original ColumnarBatch")
+                (0 until columnarBatch.numCols).toList.foreach(i =>
+                  columnarBatch.column(i).asInstanceOf[ArrowWritableColumnVector].retain())
+                columnarBatch
+              }
               return true
-            } 
+            }
             if (conditioner != null) {
               // do conditioner here
               numRows = columnarBatch.numRows
@@ -215,9 +241,11 @@ class ColumnarConditionProjector(
               ConverterUtils.releaseArrowRecordBatch(input)
               numRows = selectionVector.getRecordCount()
               if (projPrepareList == null && numRows == columnarBatch.numRows()) {
-                logInfo("No projection and conditioned row number is as same as original row number. Directly use original ColumnarBatch")
+                logInfo(
+                  "No projection and conditioned row number is as same as original row number. Directly use original ColumnarBatch")
                 resColumnarBatch = columnarBatch
-                (0 until resColumnarBatch.numCols).toList.foreach(i => resColumnarBatch.column(i).asInstanceOf[ArrowWritableColumnVector].retain())
+                (0 until resColumnarBatch.numCols).toList.foreach(i =>
+                  resColumnarBatch.column(i).asInstanceOf[ArrowWritableColumnVector].retain())
                 return true
               }
             }
@@ -226,27 +254,32 @@ class ColumnarConditionProjector(
             logInfo(s"Got empty ColumnarBatch from child or after filter")
           }
         }
-  
+
         // for now, we either filter one columnarBatch who has valid rows or we only need to do project
         // either scenario we will need to output one columnarBatch.
         beforeEval = System.nanoTime()
-        val resultColumnVectors = ArrowWritableColumnVector.allocateColumns(numRows, resultSchema).toArray
-        val outputVectors = resultColumnVectors.map(columnVector => {
-          columnVector.getValueVector()
-        }).toList.asJava
-  
+        val resultColumnVectors =
+          ArrowWritableColumnVector.allocateColumns(numRows, resultSchema).toArray
+        val outputVectors = resultColumnVectors
+          .map(columnVector => {
+            columnVector.getValueVector()
+          })
+          .toList
+          .asJava
+
         val cols = projectOrdinalList.map(i => {
           columnarBatch.column(i).asInstanceOf[ArrowWritableColumnVector].getValueVector()
         })
         input = ConverterUtils.createArrowRecordBatch(columnarBatch.numRows, cols)
-        if(conditioner != null) {
+        if (conditioner != null) {
           projector.evaluate(input, selectionVector, outputVectors);
         } else {
           projector.evaluate(input, outputVectors);
         }
-  
+
         ConverterUtils.releaseArrowRecordBatch(input)
-        val outputBatch = new ColumnarBatch(resultColumnVectors.map(_.asInstanceOf[ColumnVector]), numRows)
+        val outputBatch =
+          new ColumnarBatch(resultColumnVectors.map(_.asInstanceOf[ColumnVector]), numRows)
         proc_time += ((System.nanoTime() - beforeEval) / (1000 * 1000))
         resColumnarBatch = outputBatch
         true
@@ -255,7 +288,8 @@ class ColumnarConditionProjector(
       override def next(): ColumnarBatch = {
         nextCalled = true
         if (resColumnarBatch == null) {
-          throw new UnsupportedOperationException("Iterator has no next columnar batch or it hasn't been called by hasNext.")
+          throw new UnsupportedOperationException(
+            "Iterator has no next columnar batch or it hasn't been called by hasNext.")
         }
         numOutputBatches += 1
         numOutputRows += resColumnarBatch.numRows
@@ -264,57 +298,81 @@ class ColumnarConditionProjector(
         resColumnarBatch
       }
 
-    }// end of Iterator
-  }// end of createIterator
+    } // end of Iterator
+  } // end of createIterator
 
-}// end of class
+} // end of class
 
 object ColumnarConditionProjector extends Logging {
-  var condPrepareList: (TreeNode, ArrowType) = null
-  var conditionFieldList: java.util.List[Field] = null
-
-  var projPrepareList: Seq[(ExpressionTree, ArrowType)] = null
-  var projectFieldList: java.util.List[Field] = null
-
   def init(
       condExpr: Expression,
       projectList: Seq[Expression],
-      originalInputAttributes: Seq[Attribute]): Unit = {
+      originalInputAttributes: Seq[Attribute],
+      do_init: Boolean = true): (
+      (TreeNode, ArrowType),
+      java.util.List[Field],
+      Seq[(ExpressionTree, ArrowType)],
+      java.util.List[Field],
+      Boolean) = {
     logInfo(
       s"originalInputAttributes is ${originalInputAttributes}, \nCondition is ${condExpr}, \nProjection is ${projectList}")
     val conditionInputList: java.util.List[Field] = Lists.newArrayList()
-    condPrepareList = if (condExpr != null) {
+    val (condPrepareList, skip_filter) = if (condExpr != null) {
       val columnarCondExpr: Expression = ColumnarExpressionConverter
         .replaceWithColumnarExpression(condExpr, originalInputAttributes)
-      val (cond, resultType) =
-        columnarCondExpr.asInstanceOf[ColumnarExpression].doColumnarCodeGen(conditionInputList)
-      (cond, resultType)
+      if (do_init == false) {
+        (null, true)
+      } else {
+        val (cond, resultType) =
+          columnarCondExpr.asInstanceOf[ColumnarExpression].doColumnarCodeGen(conditionInputList)
+        ((cond, resultType), false)
+      }
     } else {
-      null
+      (null, true)
     }
     //Collections.sort(conditionFieldList, (l: Field, r: Field) => { l.getName.compareTo(r.getName)})
-    conditionFieldList = conditionInputList.asScala.toList.distinct.asJava;
+    val conditionFieldList = conditionInputList.asScala.toList.distinct.asJava;
 
     var projectInputList: java.util.List[Field] = Lists.newArrayList()
-    if (projectList != null) {
-      val columnarProjExprs: Seq[Expression] = projectList.map(expr => {
-        ColumnarExpressionConverter.replaceWithColumnarExpression(expr, originalInputAttributes)
-      })
-      projPrepareList = columnarProjExprs.map(columnarExpr => {
-        val (node, resultType) =
-          columnarExpr.asInstanceOf[ColumnarExpression].doColumnarCodeGen(projectInputList)
-        val result = Field.nullable("result", resultType)
-        (TreeBuilder.makeExpression(node, result), resultType)
-      })
-    }
-    projectFieldList = projectInputList.asScala.toList.distinct.asJava;
+    val (projPrepareList, skip_project): (Seq[(ExpressionTree, ArrowType)], Boolean) =
+      if (projectList != null) {
+        val columnarProjExprs: Seq[Expression] = projectList.map(expr => {
+          ColumnarExpressionConverter.replaceWithColumnarExpression(expr, originalInputAttributes)
+        })
+        if (do_init == false) {
+          (null, true)
+        } else {
+          var should_skip = true
+          (columnarProjExprs.map(columnarExpr => {
+            val (node, resultType) =
+              columnarExpr.asInstanceOf[ColumnarExpression].doColumnarCodeGen(projectInputList)
+            val result = Field.nullable("result", resultType)
+            if (s"${node.toProtobuf}".contains("functionNode"))
+              should_skip = false
+            logDebug(
+              s"gandiva node is ${node.toProtobuf}, result is ${result}, should_skip is ${should_skip}")
+            (TreeBuilder.makeExpression(node, result), resultType)
+          }), should_skip)
+        }
+      } else {
+        (null, true)
+      }
+    val projectFieldList = projectInputList.asScala.toList.distinct.asJava
+    (
+      condPrepareList,
+      conditionFieldList,
+      projPrepareList,
+      projectFieldList,
+      skip_filter && skip_project)
   }
+
   def prebuild(
       condition: Expression,
       projectList: Seq[Expression],
       inputSchema: Seq[Attribute]): Unit = {
-    init(condition, projectList, inputSchema)
+    init(condition, projectList, inputSchema, false)
   }
+
   def create(
       condition: Expression,
       projectList: Seq[Expression],
@@ -323,12 +381,14 @@ object ColumnarConditionProjector extends Logging {
       numOutputBatches: SQLMetric,
       numOutputRows: SQLMetric,
       procTime: SQLMetric): ColumnarConditionProjector = synchronized {
-    init(condition, projectList, inputSchema)
+    val (condPrepareList, conditionFieldList, projPrepareList, projectFieldList, skip) =
+      init(condition, projectList, inputSchema)
     new ColumnarConditionProjector(
       condPrepareList,
       conditionFieldList,
       projPrepareList,
       projectFieldList,
+      skip,
       inputSchema,
       numInputBatches,
       numOutputBatches,
