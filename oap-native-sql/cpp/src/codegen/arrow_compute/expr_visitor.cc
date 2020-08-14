@@ -321,7 +321,8 @@ arrow::Status ExprVisitor::MakeExprVisitorImpl(const std::string& func_name,
   if (func_name.compare("sum") == 0 || func_name.compare("count") == 0 ||
       func_name.compare("unique") == 0 || func_name.compare("append") == 0 ||
       func_name.compare("sum_count") == 0 || func_name.compare("avgByCount") == 0 ||
-      func_name.compare("min") == 0 || func_name.compare("max") == 0) {
+      func_name.compare("min") == 0 || func_name.compare("max") == 0 ||
+      func_name.compare("sum_count_merge") == 0) {
     RETURN_NOT_OK(AggregateVisitorImpl::Make(p, func_name, &impl_));
     goto finish;
   }
