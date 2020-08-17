@@ -17,19 +17,24 @@
 
 package com.intel.oap.expression
 
-import java.io.ByteArrayInputStream
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, IOException}
 import java.nio.ByteBuffer
+import java.nio.channels.Channels
 import java.util.ArrayList
+
 import com.intel.oap.vectorized.ArrowWritableColumnVector
-import io.netty.buffer.ArrowBuf
-import org.apache.spark.rdd.RDD
+import io.netty.buffer.{ArrowBuf, ByteBufAllocator, ByteBufOutputStream}
+import org.apache.arrow.gandiva.exceptions.GandivaException
+import org.apache.arrow.gandiva.expression.ExpressionTree
+import org.apache.arrow.gandiva.ipc.GandivaTypes
+import org.apache.arrow.gandiva.ipc.GandivaTypes.ExpressionList
 import org.apache.arrow.vector._
-import org.apache.arrow.vector.ipc.{ArrowStreamReader, ArrowStreamWriter, WriteChannel}
+import org.apache.arrow.vector.ipc.{ArrowStreamReader, WriteChannel}
 import org.apache.arrow.vector.ipc.message.{
   ArrowFieldNode,
   ArrowRecordBatch,
-  MessageSerializer,
-  IpcOption
+  IpcOption,
+  MessageSerializer
 }
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.Schema
@@ -42,7 +47,7 @@ import org.apache.spark.sql.catalyst.optimizer._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ArrowUtils
-import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
+import org.apache.spark.sql.vectorized.{ColumnVector, ColumnarBatch}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ListBuffer
@@ -314,4 +319,19 @@ object ConverterUtils extends Logging {
     s"ConverterUtils"
   }
 
+  @throws[IOException]
+  def getSchemaBytesBuf(schema: Schema): Array[Byte] = {
+    val out: ByteArrayOutputStream = new ByteArrayOutputStream
+    MessageSerializer.serialize(new WriteChannel(Channels.newChannel(out)), schema)
+    out.toByteArray
+  }
+
+  @throws[GandivaException]
+  def getExprListBytesBuf(exprs: List[ExpressionTree]): Array[Byte] = {
+    val builder: ExpressionList.Builder = GandivaTypes.ExpressionList.newBuilder
+    exprs.foreach { expr =>
+      builder.addExprs(expr.toProtobuf)
+    }
+    builder.build.toByteArray
+  }
 }
