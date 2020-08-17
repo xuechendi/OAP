@@ -109,7 +109,7 @@ case class ColumnarPreOverrides(conf: SparkConf) extends Rule[SparkPlan] {
         logDebug(s"Columnar Processing for ${plan.getClass} is currently supported.")
         new ColumnarSortExec(plan.sortOrder, plan.global, child, plan.testSpillFrequency)
       } else {
-        val children = plan.children.map(replaceWithColumnarPlan)
+        val children = applyChildrenWithStrategy(plan)
         logDebug(s"Columnar Processing for ${plan.getClass} is not currently supported.")
         plan.withNewChildren(children)
       }
@@ -136,7 +136,8 @@ case class ColumnarPreOverrides(conf: SparkConf) extends Rule[SparkPlan] {
               plan.canChangeNumPartitions))
         }
       } else {
-        val children = plan.children.map(replaceWithColumnarPlan)
+        val children = applyChildrenWithStrategy(plan)
+        //val children = plan.children.map(replaceWithColumnarPlan)
         logDebug(s"Columnar Processing for ${plan.getClass} is not currently supported.")
         plan.withNewChildren(children)
       }
@@ -194,7 +195,7 @@ case class ColumnarPreOverrides(conf: SparkConf) extends Rule[SparkPlan] {
         }
         newPlan
       } else {
-        val children = plan.children.map(replaceWithColumnarPlan)
+        val children = applyChildrenWithStrategy(plan)
         logDebug(s"Columnar Processing for ${plan.getClass} is not currently supported.")
         plan.withNewChildren(children)
       }
@@ -213,33 +214,45 @@ case class ColumnarPreOverrides(conf: SparkConf) extends Rule[SparkPlan] {
         ColumnarCustomShuffleReaderExec(plan.child, plan.partitionSpecs, plan.description))
 
     case p =>
-      val children = p.children.map(child =>
-        child match {
-          case project: ProjectExec =>
-            val newChild = replaceWithColumnarPlan(project.child)
-            if (newChild.supportsColumnar) {
-              replaceWithColumnarPlan(child)
-            } else {
-              val newProject = project.withNewChildren(List(newChild))
-              newProject
-            }
-          case filter: FilterExec =>
-            val newChild = replaceWithColumnarPlan(filter.child)
-            if (newChild.supportsColumnar) {
-              replaceWithColumnarPlan(child)
-            } else {
-              val newFilter = filter.withNewChildren(List(newChild))
-              newFilter
-            }
-          case _ =>
-            replaceWithColumnarPlan(child)
-        })
+      val children = applyChildrenWithStrategy(p)
       logDebug(s"Columnar Processing for ${p.getClass} is currently not supported.")
       p.withNewChildren(children)
   }
 
   def apply(plan: SparkPlan): SparkPlan = {
     replaceWithColumnarPlan(plan)
+  }
+
+  def applyChildrenWithStrategy(p: SparkPlan): Seq[SparkPlan] = {
+    p.children.map(child =>
+      child match {
+        case project: ProjectExec =>
+          val newChild = replaceWithColumnarPlan(project.child)
+          if (newChild.supportsColumnar) {
+            replaceWithColumnarPlan(child)
+          } else {
+            val newProject = project.withNewChildren(List(newChild))
+            newProject
+          }
+        case filter: FilterExec =>
+          val newChild = replaceWithColumnarPlan(filter.child)
+          if (newChild.supportsColumnar) {
+            replaceWithColumnarPlan(child)
+          } else {
+            val newFilter = filter.withNewChildren(List(newChild))
+            newFilter
+          }
+        case aggr: HashAggregateExec =>
+          val newChild = replaceWithColumnarPlan(aggr.child)
+          if (newChild.supportsColumnar) {
+            replaceWithColumnarPlan(child)
+          } else {
+            val newAggr = aggr.withNewChildren(List(newChild))
+            newAggr
+          }
+        case _ =>
+          replaceWithColumnarPlan(child)
+      })
   }
 }
 
