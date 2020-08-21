@@ -260,7 +260,6 @@ class GroupByActionCodeGen : public ActionCodeGen {
   GroupByActionCodeGen(std::string name, bool keep, std::vector<std::string> child_list,
                        std::vector<std::string> input_list,
                        std::vector<std::shared_ptr<arrow::Field>> input_fields_list,
-                       std::string prepare_codes_str,
                        std::shared_ptr<gandiva::Expression> projector) {
     is_key_ = true;
     std::shared_ptr<arrow::DataType> in_data_type;
@@ -379,7 +378,6 @@ class SumActionCodeGen : public ActionCodeGen {
   SumActionCodeGen(std::string name, std::vector<std::string> child_list,
                    std::vector<std::string> input_list,
                    std::vector<std::shared_ptr<arrow::Field>> input_fields_list,
-                   std::string prepare_codes_str,
                    std::shared_ptr<gandiva::Expression> projector) {
     is_key_ = false;
     std::shared_ptr<arrow::DataType> data_type;
@@ -513,7 +511,6 @@ class CountActionCodeGen : public ActionCodeGen {
   CountActionCodeGen(std::string name, std::vector<std::string> child_list,
                      std::vector<std::string> input_list,
                      std::vector<std::shared_ptr<arrow::Field>> input_fields_list,
-                     std::string prepare_codes_str,
                      std::shared_ptr<gandiva::Expression> projector) {
     is_key_ = false;
     std::shared_ptr<arrow::DataType> data_type;
@@ -613,7 +610,6 @@ class CountLiteralActionCodeGen : public ActionCodeGen {
                             std::vector<std::string> child_list,
                             std::vector<std::string> input_list,
                             std::vector<std::shared_ptr<arrow::Field>> input_fields_list,
-                            std::string prepare_codes_str,
                             std::shared_ptr<gandiva::Expression> projector) {
     is_key_ = false;
     auto sig_name = "action_countLiteral_" + name + "_";
@@ -650,7 +646,6 @@ class SumCountActionCodeGen : public ActionCodeGen {
   SumCountActionCodeGen(std::string name, std::vector<std::string> child_list,
                         std::vector<std::string> input_list,
                         std::vector<std::shared_ptr<arrow::Field>> input_fields_list,
-                        std::string prepare_codes_str,
                         std::shared_ptr<gandiva::Expression> projector) {
     is_key_ = false;
     std::shared_ptr<arrow::DataType> in_data_type;
@@ -811,7 +806,6 @@ class AvgByCountActionCodeGen : public ActionCodeGen {
   AvgByCountActionCodeGen(std::string name, std::vector<std::string> child_list,
                           std::vector<std::string> input_list,
                           std::vector<std::shared_ptr<arrow::Field>> input_fields_list,
-                          std::string prepare_codes_str,
                           std::shared_ptr<gandiva::Expression> projector) {
     is_key_ = false;
     auto sig_name = "action_sum_" + name + "_";
@@ -988,7 +982,6 @@ class MaxActionCodeGen : public ActionCodeGen {
   MaxActionCodeGen(std::string name, std::vector<std::string> child_list,
                    std::vector<std::string> input_list,
                    std::vector<std::shared_ptr<arrow::Field>> input_fields_list,
-                   std::string prepare_codes_str,
                    std::shared_ptr<gandiva::Expression> projector) {
     is_key_ = false;
     std::shared_ptr<arrow::DataType> in_data_type;
@@ -1105,7 +1098,6 @@ class MinActionCodeGen : public ActionCodeGen {
   MinActionCodeGen(std::string name, std::vector<std::string> child_list,
                    std::vector<std::string> input_list,
                    std::vector<std::shared_ptr<arrow::Field>> input_fields_list,
-                   std::string prepare_codes_str,
                    std::shared_ptr<gandiva::Expression> projector) {
     is_key_ = false;
     std::shared_ptr<arrow::DataType> in_data_type;
@@ -1224,7 +1216,6 @@ class AvgActionCodeGen : public ActionCodeGen {
   AvgActionCodeGen(std::string name, std::vector<std::string> child_list,
                    std::vector<std::string> input_list,
                    std::vector<std::shared_ptr<arrow::Field>> input_fields_list,
-                   std::string prepare_codes_str,
                    std::shared_ptr<gandiva::Expression> projector) {
     is_key_ = false;
     std::shared_ptr<arrow::DataType> in_data_type;
@@ -1339,7 +1330,6 @@ class SumCountMergeActionCodeGen : public ActionCodeGen {
   SumCountMergeActionCodeGen(std::string name, std::vector<std::string> child_list,
                              std::vector<std::string> input_list,
                              std::vector<std::shared_ptr<arrow::Field>> input_fields_list,
-                             std::string prepare_codes_str,
                              std::shared_ptr<gandiva::Expression> projector) {
     is_key_ = false;
     auto sig_name = "action_sum_" + name + "_";
@@ -1510,7 +1500,7 @@ class StddevSampPartialActionCodeGen : public ActionCodeGen {
       std::string name, std::vector<std::string> child_list,
       std::vector<std::string> input_list,
       std::vector<std::shared_ptr<arrow::Field>> input_fields_list,
-      std::string prepare_codes_str, std::shared_ptr<gandiva::Expression> projector) {
+      std::shared_ptr<gandiva::Expression> projector) {
     is_key_ = false;
     std::shared_ptr<arrow::DataType> in_data_type;
     if (projector) {
@@ -1681,7 +1671,7 @@ class StddevSampFinalActionCodeGen : public ActionCodeGen {
       std::string name, std::vector<std::string> child_list,
       std::vector<std::string> input_list,
       std::vector<std::shared_ptr<arrow::Field>> input_fields_list,
-      std::string prepare_codes_str, std::shared_ptr<gandiva::Expression> projector) {
+      std::shared_ptr<gandiva::Expression> projector) {
     is_key_ = false;
     std::string avg_name = "action_avg_" + name + "_";
     std::string m2_name = "action_m2_" + name + "_";
