@@ -140,7 +140,6 @@ object ConverterUtils extends Logging {
       data: Array[Array[Byte]]): Iterator[ColumnarBatch] = {
     new Iterator[ColumnarBatch] {
       var array_id = 0
-      var incorrectInput = false
       val allocator = ArrowWritableColumnVector.getNewAllocator
       var input = new ByteArrayInputStream(data(array_id))
       var messageReader =
@@ -149,14 +148,13 @@ object ConverterUtils extends Logging {
       var result: MessageResult = null
 
       override def hasNext: Boolean =
-        if ((array_id < (data.size - 1) || input.available > 0) && (!incorrectInput)) {
+        if (array_id < (data.size - 1) || input.available > 0) {
           return true
         } else {
           messageReader.close
           return false
         }
       override def next(): ColumnarBatch = {
-        //try {
         if (input.available == 0) {
           messageReader.close
           array_id += 1
@@ -171,48 +169,49 @@ object ConverterUtils extends Logging {
             ArrowWritableColumnVector.allocateColumns(0, resultStructType).toArray
           return new ColumnarBatch(resultColumnVectors.map(_.asInstanceOf[ColumnVector]), 0)
         }
-        if (schema == null) {
-          result = messageReader.readNext();
+        try {
+          if (schema == null) {
+            result = messageReader.readNext();
 
-          if (result == null) {
-            throw new IOException("Unexpected end of input. Missing schema.");
+            if (result == null) {
+              throw new IOException("Unexpected end of input. Missing schema.");
+            }
+
+            if (result.getMessage().headerType() != MessageHeader.Schema) {
+              throw new IOException(
+                "Expected schema but header was " + result.getMessage().headerType());
+            }
+
+            schema = MessageSerializer.deserializeSchema(result.getMessage());
+
           }
 
-          if (result.getMessage().headerType() != MessageHeader.Schema) {
+          result = messageReader.readNext();
+          if (result.getMessage().headerType() == MessageHeader.Schema) {
+            result = messageReader.readNext();
+          }
+
+          if (result.getMessage().headerType() != MessageHeader.RecordBatch) {
             throw new IOException(
-              "Expected schema but header was " + result.getMessage().headerType());
+              "Expected recordbatch but header was " + result.getMessage().headerType());
+          }
+          var bodyBuffer = result.getBodyBuffer();
+
+          // For zero-length batches, need an empty buffer to deserialize the batch
+          if (bodyBuffer == null) {
+            bodyBuffer = allocator.getEmpty();
           }
 
-          schema = MessageSerializer.deserializeSchema(result.getMessage());
-
+          val batch = MessageSerializer.deserializeRecordBatch(result.getMessage(), bodyBuffer);
+          val vectors = fromArrowRecordBatch(schema, batch, allocator)
+          val length = batch.getLength
+          batch.close
+          new ColumnarBatch(vectors.map(_.asInstanceOf[ColumnVector]), length)
+        } catch {
+          case e =>
+            messageReader.close
+            throw e
         }
-
-        result = messageReader.readNext();
-        if (result.getMessage().headerType() == MessageHeader.Schema) {
-          result = messageReader.readNext();
-        }
-
-        if (result.getMessage().headerType() != MessageHeader.RecordBatch) {
-          throw new IOException(
-            "Expected recordbatch but header was " + result.getMessage().headerType());
-        }
-        var bodyBuffer = result.getBodyBuffer();
-
-        // For zero-length batches, need an empty buffer to deserialize the batch
-        if (bodyBuffer == null) {
-          bodyBuffer = allocator.getEmpty();
-        }
-
-        val batch = MessageSerializer.deserializeRecordBatch(result.getMessage(), bodyBuffer);
-        val vectors = fromArrowRecordBatch(schema, batch, allocator)
-        val length = batch.getLength
-        batch.close
-        new ColumnarBatch(vectors.map(_.asInstanceOf[ColumnVector]), length)
-        /*} catch {
-          case e: java.io.IOException =>
-            incorrectInput = true
-            null
-        }*/
       }
     }
   }
