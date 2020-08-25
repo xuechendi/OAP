@@ -101,30 +101,32 @@ class ColumnarShuffledHashJoin(
         }
         return res
       }
-      val beforeBuild = System.nanoTime()
-      // handle projection
-      val projectedBuildKeyCols: List[ArrowWritableColumnVector] = if (buildProjector != null) {
-        val builderOrdinalList = buildProjector.getOrdinalList
-        val builderAttributes = buildProjector.output
-        val builderProjectCols = builderOrdinalList.map(i => {
-          build_cb.column(i).asInstanceOf[ArrowWritableColumnVector]
-        })
-        buildProjector.evaluate(build_cb.numRows, builderProjectCols.map(_.getValueVector()))
-      } else {
-        List[ArrowWritableColumnVector]()
-      }
+      if (build_cb.numRows > 0) {
+        val beforeBuild = System.nanoTime()
+        // handle projection
+        val projectedBuildKeyCols: List[ArrowWritableColumnVector] = if (buildProjector != null) {
+          val builderOrdinalList = buildProjector.getOrdinalList
+          val builderAttributes = buildProjector.output
+          val builderProjectCols = builderOrdinalList.map(i => {
+            build_cb.column(i).asInstanceOf[ArrowWritableColumnVector]
+          })
+          buildProjector.evaluate(build_cb.numRows, builderProjectCols.map(_.getValueVector()))
+        } else {
+          List[ArrowWritableColumnVector]()
+        }
 
-      val buildCols = (0 until build_cb.numCols).toList.map(i =>
-        build_cb.column(i).asInstanceOf[ArrowWritableColumnVector]) ::: projectedBuildKeyCols
-      val build_rb =
-        ConverterUtils.createArrowRecordBatch(build_cb.numRows, buildCols.map(_.getValueVector))
-      (0 until build_cb.numCols).toList.foreach(i =>
-        build_cb.column(i).asInstanceOf[ArrowWritableColumnVector].retain())
-      inputBatchHolder += build_cb
-      prober.evaluate(build_rb)
-      _buildTime += NANOSECONDS.toMillis(System.nanoTime() - beforeBuild)
-      ConverterUtils.releaseArrowRecordBatch(build_rb)
-      projectedBuildKeyCols.foreach(v => v.close)
+        val buildCols = (0 until build_cb.numCols).toList.map(i =>
+          build_cb.column(i).asInstanceOf[ArrowWritableColumnVector]) ::: projectedBuildKeyCols
+        val build_rb =
+          ConverterUtils.createArrowRecordBatch(build_cb.numRows, buildCols.map(_.getValueVector))
+        (0 until build_cb.numCols).toList.foreach(i =>
+          build_cb.column(i).asInstanceOf[ArrowWritableColumnVector].retain())
+        inputBatchHolder += build_cb
+        prober.evaluate(build_rb)
+        _buildTime += NANOSECONDS.toMillis(System.nanoTime() - beforeBuild)
+        ConverterUtils.releaseArrowRecordBatch(build_rb)
+        projectedBuildKeyCols.foreach(v => v.close)
+      }
     }
     if (build_cb != null) {
       build_cb = null
@@ -164,28 +166,31 @@ class ColumnarShuffledHashJoin(
         val cb = streamIter.next()
         last_cb = cb
         val beforeJoin = System.nanoTime()
+        val output_rb = if (cb.numRows > 0) {
+          val projectedStreamKeyCols: List[ArrowWritableColumnVector] =
+            if (streamProjector != null) {
+              val streamOrdinalList = streamProjector.getOrdinalList
+              val streamAttributes = streamProjector.output
+              val streamProjectCols = streamOrdinalList.map(i => {
+                cb.column(i).asInstanceOf[ArrowWritableColumnVector]
+              })
+              streamProjector.evaluate(cb.numRows, streamProjectCols.map(_.getValueVector()))
+            } else {
+              List[ArrowWritableColumnVector]()
+            }
+          val streamCols = (0 until cb.numCols).toList.map(i =>
+            cb.column(i).asInstanceOf[ArrowWritableColumnVector]) ::: projectedStreamKeyCols
+          val stream_rb: ArrowRecordBatch =
+            ConverterUtils.createArrowRecordBatch(cb.numRows, streamCols.map(_.getValueVector))
 
-        val projectedStreamKeyCols: List[ArrowWritableColumnVector] =
-          if (streamProjector != null) {
-            val streamOrdinalList = streamProjector.getOrdinalList
-            val streamAttributes = streamProjector.output
-            val streamProjectCols = streamOrdinalList.map(i => {
-              cb.column(i).asInstanceOf[ArrowWritableColumnVector]
-            })
-            streamProjector.evaluate(cb.numRows, streamProjectCols.map(_.getValueVector()))
-          } else {
-            List[ArrowWritableColumnVector]()
-          }
-        val streamCols = (0 until cb.numCols).toList.map(i =>
-          cb.column(i).asInstanceOf[ArrowWritableColumnVector]) ::: projectedStreamKeyCols
-        val stream_rb: ArrowRecordBatch =
-          ConverterUtils.createArrowRecordBatch(cb.numRows, streamCols.map(_.getValueVector))
+          val res = probe_iterator.process(stream_input_arrow_schema, stream_rb)
 
-        val output_rb = probe_iterator.process(stream_input_arrow_schema, stream_rb)
-
-        projectedStreamKeyCols.foreach(v => v.close)
-
-        ConverterUtils.releaseArrowRecordBatch(stream_rb)
+          ConverterUtils.releaseArrowRecordBatch(stream_rb)
+          projectedStreamKeyCols.foreach(v => v.close)
+          res
+        } else {
+          null
+        }
         joinTime += NANOSECONDS.toMillis(System.nanoTime() - beforeJoin)
         if (output_rb == null) {
           val resultColumnVectors =
@@ -271,6 +276,10 @@ object ColumnarShuffledHashJoin extends Logging {
     val lkeyFieldList: List[Field] = leftKeys.toList.zipWithIndex.map {
       case (expr, i) => {
         val (nativeNode, returnType) = ConverterUtils.getColumnarFuncNode(expr)
+        if (s"${nativeNode.toProtobuf}".contains("none#")) {
+          throw new UnsupportedOperationException(
+            s"Unsupport to generate native expression from replaceable expression.")
+        }
         if (s"${nativeNode.toProtobuf}".contains("fnNode")) {
           lkeyProjectOrdinalList += i
           Field.nullable(s"${expr}", returnType)
@@ -437,6 +446,10 @@ object ColumnarShuffledHashJoin extends Logging {
           columnarExpression
             .asInstanceOf[ColumnarExpression]
             .doColumnarCodeGen(conditionInputList)
+        if (s"${condition_expression_node.toProtobuf}".contains("ifNode")) {
+          throw new UnsupportedOperationException(
+            s"ColumnarSHJ can't handle condition with case when")
+        }
         Lists.newArrayList(build_keys_node, stream_keys_node, condition_expression_node)
       } else {
         Lists.newArrayList(build_keys_node, stream_keys_node)
@@ -476,9 +489,9 @@ object ColumnarShuffledHashJoin extends Logging {
       right,
       sparkConf)
 
-    /*System.out.println(
-      s"\nleft_schema is ${left.output}, right_schema is ${right.output}, \nleftKeys is ${leftKeys}, rightKeys is ${rightKeys}, \nresultSchema is ${resultSchema}, \njoinType is ${joinType}, buildSide is ${buildSide}, condition is ${condition}")
-    System.out.println(s"condition_probe_expr is ${condition_probe_expr.toProtobuf}")*/
+    //System.out.println(
+    //s"\nleft_schema is ${left.output}, right_schema is ${right.output}, \nleftKeys is ${leftKeys}, rightKeys is ${rightKeys}, \nresultSchema is ${resultSchema}, \njoinType is ${joinType}, buildSide is ${buildSide}, condition is ${condition}")
+    //System.out.println(s"condition_probe_expr is ${condition_probe_expr.toProtobuf}")
     prober = new ExpressionEvaluator()
     val signature = prober.build(
       build_input_arrow_schema,
