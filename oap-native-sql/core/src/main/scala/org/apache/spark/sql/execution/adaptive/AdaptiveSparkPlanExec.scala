@@ -415,7 +415,7 @@ case class AdaptiveSparkPlanExec(
             }
           }
           val columnarExchange = new ColumnarBroadcastExchangeExec(b.mode, columnarExchangeChild)
-          new ColumnarBroadcastQueryStageExec(currentStageId, columnarExchange)
+          BroadcastQueryStageExec(currentStageId, columnarExchange)
         } else {
           BroadcastQueryStageExec(currentStageId, optimizedPlanWithExchange)
         }
