@@ -70,7 +70,7 @@ case class ColumnarPreOverrides(conf: SparkConf) extends Rule[SparkPlan] {
         newPlan = newColumnarPlan
       } catch {
         case e: UnsupportedOperationException =>
-          logWarning(s"Fall back to use RowBased Filter and Project Exec")
+          System.out.println(s"Fall back to use RowBased Filter and Project Exec")
       }
       if (newPlan == null) {
         if (columnarPlan.isInstanceOf[ColumnarConditionProjectExec]) {
@@ -103,7 +103,7 @@ case class ColumnarPreOverrides(conf: SparkConf) extends Rule[SparkPlan] {
         newPlan = columnarPlan
       } catch {
         case e: UnsupportedOperationException =>
-          logWarning(s"Fall back to use HashAggregateExec")
+          System.out.println(s"Fall back to use HashAggregateExec, error is ${e.getMessage()}")
       }
       newPlan
     case plan: SortExec =>
@@ -162,7 +162,9 @@ case class ColumnarPreOverrides(conf: SparkConf) extends Rule[SparkPlan] {
         newPlan = columnarPlan
       } catch {
         case e: UnsupportedOperationException =>
-          System.out.println(s"Fall back to use ShuffledHashJoinExec")
+          System.out.println(
+            s"ColumnarShuffledHashJoinExec Fall back to use ShuffledHashJoinExec, error is ${e
+              .getMessage()}")
       }
       newPlan
     case plan: BroadcastHashJoinExec =>
@@ -222,7 +224,8 @@ case class ColumnarPreOverrides(conf: SparkConf) extends Rule[SparkPlan] {
           newPlan = columnarPlan
         } catch {
           case e: UnsupportedOperationException =>
-            System.out.println(s"Fall back to use ShuffledHashJoinExec")
+            System.out.println(
+              s"ColumnarBroadcastHashJoinExec Fall back to use ShuffledHashJoinExec, error is ${e.getMessage()}")
         }
         newPlan
       } else {
@@ -251,10 +254,17 @@ case class ColumnarPreOverrides(conf: SparkConf) extends Rule[SparkPlan] {
         plan.withNewChildren(children)
       }
 
-    case plan: ShuffleQueryStageExec if columnarConf.enableColumnarShuffle =>
-      // To catch the case when AQE enabled and there's no wrapped CustomShuffleReaderExec,
-      // and don't call replaceWithColumnarPlan because ShuffleQueryStageExec is a leaf node
-      CoalesceBatchesExec(plan)
+    case plan: BroadcastQueryStageExec =>
+      plan
+
+    case plan: ShuffleQueryStageExec =>
+      if (columnarConf.enableColumnarShuffle) {
+        // To catch the case when AQE enabled and there's no wrapped CustomShuffleReaderExec,
+        // and don't call replaceWithColumnarPlan because ShuffleQueryStageExec is a leaf node
+        CoalesceBatchesExec(plan)
+      } else {
+        plan
+      }
 
     case plan: CustomShuffleReaderExec if columnarConf.enableColumnarShuffle =>
       // To catch the case when AQE enabled and there's a wrapped CustomShuffleReaderExec,
