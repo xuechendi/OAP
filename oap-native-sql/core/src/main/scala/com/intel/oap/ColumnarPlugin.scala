@@ -26,6 +26,7 @@ import com.intel.oap.execution._
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.adaptive.{
   BroadcastQueryStageExec,
   ColumnarCustomShuffleReaderExec,
@@ -40,7 +41,7 @@ import org.apache.spark.sql.execution.exchange.{
   ReusedExchangeExec,
   ShuffleExchangeExec
 }
-import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, ShuffledHashJoinExec}
+import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.execution.joins.{BuildLeft, BuildRight, BuildSide}
 import org.apache.spark.sql.execution.joins.SortMergeJoinExec
 import org.apache.spark.sql.internal.SQLConf
@@ -145,6 +146,12 @@ case class ColumnarPreOverrides(conf: SparkConf) extends Rule[SparkPlan] {
         plan.withNewChildren(children)
       }
     case plan: ShuffledHashJoinExec =>
+      if (!columnarConf.enablePreferColumnar) {
+        val (doConvert, child) = optimizeJoin(0, plan)
+        if (doConvert) {
+          return child
+        }
+      }
       val left = replaceWithColumnarPlan(plan.left)
       val right = replaceWithColumnarPlan(plan.right)
       logDebug(s"Columnar Processing for ${plan.getClass} is currently supported.")
@@ -168,37 +175,29 @@ case class ColumnarPreOverrides(conf: SparkConf) extends Rule[SparkPlan] {
       }
       newPlan
     case plan: BroadcastHashJoinExec =>
+      if (!columnarConf.enablePreferColumnar) {
+        val (doConvert, child) = optimizeJoin(0, plan)
+        if (doConvert) {
+          return child
+        }
+      }
       if (columnarConf.enableColumnarBroadcastJoin) {
-        val streamedPlan = plan.buildSide match {
-          case BuildLeft =>
-            plan.right
-          case BuildRight =>
-            plan.left
-        }
-        val numPartitions = streamedPlan match {
-          case shufflePlan: CustomShuffleReaderExec =>
-            shufflePlan.partitionSpecs.length
+        var (buildPlan, streamedPlan) = getJoinPlan(plan)
+        buildPlan = buildPlan match {
+          case curPlan: BroadcastQueryStageExec
+              if curPlan.plan.isInstanceOf[BroadcastExchangeExec] =>
+            val originalBroadcastPlan = curPlan.plan.asInstanceOf[BroadcastExchangeExec]
+            BroadcastExchangeExec(originalBroadcastPlan.mode, DataToArrowColumnarExec(curPlan, 1))
           case _ =>
-            streamedPlan.outputPartitioning.numPartitions
+            replaceWithColumnarPlan(buildPlan)
         }
-        val o_left = if (plan.left.isInstanceOf[BroadcastQueryStageExec]) {
-          DataToArrowColumnarExec(replaceWithColumnarPlan(plan.left), numPartitions)
-        } else {
-          replaceWithColumnarPlan(plan.left)
+        var newPlan = plan.buildSide match {
+          case BuildLeft =>
+            plan.withNewChildren(List(buildPlan, replaceWithColumnarPlan(streamedPlan)))
+          case BuildRight =>
+            plan.withNewChildren(List(replaceWithColumnarPlan(streamedPlan), buildPlan))
         }
-        val o_right = if (plan.right.isInstanceOf[BroadcastQueryStageExec]) {
-          DataToArrowColumnarExec(replaceWithColumnarPlan(plan.right), numPartitions)
-        } else {
-          replaceWithColumnarPlan(plan.right)
-        }
-        var newPlan: SparkPlan = new ShuffledHashJoinExec(
-          plan.leftKeys,
-          plan.rightKeys,
-          plan.joinType,
-          plan.buildSide,
-          plan.condition,
-          o_left,
-          o_right)
+
         val left = if (plan.left.isInstanceOf[BroadcastExchangeExec]) {
           val child = plan.left.asInstanceOf[BroadcastExchangeExec]
           new ColumnarBroadcastExchangeExec(child.mode, replaceWithColumnarPlan(child.child))
@@ -235,6 +234,12 @@ case class ColumnarPreOverrides(conf: SparkConf) extends Rule[SparkPlan] {
       }
 
     case plan: SortMergeJoinExec =>
+      if (!columnarConf.enablePreferColumnar) {
+        val (doConvert, child) = optimizeJoin(0, plan)
+        if (doConvert) {
+          return child
+        }
+      }
       if (columnarConf.enableColumnarSortMergeJoin && plan.condition == None) {
         val left = replaceWithColumnarPlan(plan.left)
         val right = replaceWithColumnarPlan(plan.right)
@@ -282,6 +287,129 @@ case class ColumnarPreOverrides(conf: SparkConf) extends Rule[SparkPlan] {
 
   def apply(plan: SparkPlan): SparkPlan = {
     replaceWithColumnarPlan(plan)
+  }
+
+  def optimizeJoin(
+      level: Int,
+      plan: SparkPlan,
+      mustDoConvert: Boolean = false): (Boolean, SparkPlan) = {
+    plan match {
+      case join: ShuffledHashJoinExec =>
+        val (buildPlan, streamPlan) = getJoinPlan(join)
+        val (doConvert, child) = optimizeJoin(level + 1, streamPlan)
+        val newPlan = if (doConvert) {
+          if (columnarConf.enableJoinOptimizationReplace) {
+            val left = join.buildSide match {
+              case BuildLeft =>
+                SortExec(
+                  join.leftKeys.map(expr => SortOrder(expr, Ascending)),
+                  false,
+                  replaceWithColumnarPlan(join.left))
+              case BuildRight =>
+                SortExec(join.leftKeys.map(expr => SortOrder(expr, Ascending)), false, child)
+            }
+            val right = join.buildSide match {
+              case BuildLeft =>
+                SortExec(join.rightKeys.map(expr => SortOrder(expr, Ascending)), false, child)
+              case BuildRight =>
+                SortExec(
+                  join.rightKeys.map(expr => SortOrder(expr, Ascending)),
+                  false,
+                  replaceWithColumnarPlan(join.right))
+            }
+            SortMergeJoinExec(
+              join.leftKeys,
+              join.rightKeys,
+              join.joinType,
+              join.condition,
+              left,
+              right)
+          } else {
+            join.buildSide match {
+              case BuildLeft =>
+                join.withNewChildren(List(replaceWithColumnarPlan(buildPlan), child))
+              case BuildRight =>
+                join.withNewChildren(List(child, replaceWithColumnarPlan(buildPlan)))
+            }
+          }
+        } else {
+          join
+        }
+        (doConvert, newPlan)
+
+      case join: BroadcastHashJoinExec =>
+        var (buildPlan, streamPlan) = getJoinPlan(join)
+        val (doConvert, child) = optimizeJoin(level + 1, streamPlan)
+        val newPlan = if (doConvert) {
+          buildPlan = buildPlan match {
+            case curPlan: BroadcastQueryStageExec
+                if curPlan.plan.isInstanceOf[BroadcastExchangeExec] =>
+              val originalBroadcastPlan = curPlan.plan.asInstanceOf[BroadcastExchangeExec]
+              BroadcastExchangeExec(
+                originalBroadcastPlan.mode,
+                DataToArrowColumnarExec(curPlan, 1))
+            case _ =>
+              replaceWithColumnarPlan(buildPlan)
+          }
+          join.buildSide match {
+            case BuildLeft =>
+              join.withNewChildren(List(buildPlan, child))
+            case BuildRight =>
+              join.withNewChildren(List(child, buildPlan))
+          }
+        } else {
+          join
+        }
+        (doConvert, newPlan)
+
+      case join: SortMergeJoinExec =>
+        var (leftdoConvert, left) = optimizeJoin(level + 1, join.left)
+        var (rightdoConvert, right) = optimizeJoin(level + 1, join.right, leftdoConvert)
+        if (leftdoConvert != rightdoConvert) {
+          val res = optimizeJoin(level + 1, join.left, rightdoConvert)
+          left = res._2
+        }
+        val newPlan = if (rightdoConvert) {
+          join.withNewChildren(List(left, right))
+        } else {
+          join
+        }
+        (rightdoConvert, newPlan)
+
+      case project: ProjectExec =>
+        val (doConvert, child) = optimizeJoin(level + 1, project.child)
+        val newPlan = if (doConvert) {
+          project.withNewChildren(List(child))
+        } else {
+          project
+        }
+        (doConvert, newPlan)
+
+      case _ =>
+        if (mustDoConvert || level >= columnarConf.joinOptimizationThrottle) {
+          (true, replaceWithColumnarPlan(plan))
+        } else {
+          (false, plan)
+        }
+    }
+  }
+
+  def getJoinPlan(join: HashJoin): (SparkPlan, SparkPlan) = {
+    join.buildSide match {
+      case BuildLeft =>
+        (join.left, join.right)
+      case BuildRight =>
+        (join.right, join.left)
+    }
+  }
+
+  def getJoinKeys(join: HashJoin): (Seq[Expression], Seq[Expression]) = {
+    join.buildSide match {
+      case BuildLeft =>
+        (join.leftKeys, join.rightKeys)
+      case BuildRight =>
+        (join.rightKeys, join.leftKeys)
+    }
   }
 
   def applyChildrenWithStrategy(p: SparkPlan): Seq[SparkPlan] = {

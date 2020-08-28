@@ -87,10 +87,10 @@ case class DataToArrowColumnarExec(child: SparkPlan, numPartitions: Int) extends
     BroadcastColumnarRDD(sparkContext, metrics, numPartitions, inputByteBuf)
   }
 
-  override def canEqual(other: Any): Boolean = other.isInstanceOf[ColumnarBroadcastHashJoinExec]
+  override def canEqual(other: Any): Boolean = other.isInstanceOf[DataToArrowColumnarExec]
 
   override def equals(other: Any): Boolean = other match {
-    case that: ColumnarBroadcastHashJoinExec =>
+    case that: DataToArrowColumnarExec =>
       (that canEqual this) && super.equals(that)
     case _ => false
   }
