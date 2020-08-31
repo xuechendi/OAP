@@ -27,7 +27,12 @@ import org.apache.spark.{broadcast, TaskContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.{Utils, UserAddedJarUtils}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{
+  Attribute,
+  Expression,
+  SortOrder,
+  UnsafeProjection
+}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical._
@@ -68,7 +73,18 @@ case class DataToArrowColumnarExec(child: SparkPlan, numPartitions: Int) extends
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
 
   override def doExecute(): RDD[InternalRow] = {
-    child.execute()
+    val numOutputRows = longMetric("numOutputRows")
+    val numOutputBatches = longMetric("numOutputBatches")
+    val inputByteBuf = child.executeBroadcast[Array[Array[Byte]]]()
+    val inputRdd = BroadcastColumnarRDD(sparkContext, metrics, numPartitions, inputByteBuf)
+    inputRdd.mapPartitions { batches =>
+      val toUnsafe = UnsafeProjection.create(output, output)
+      batches.flatMap { batch =>
+        numOutputBatches += 1
+        numOutputRows += batch.numRows()
+        batch.rowIterator().asScala.map(toUnsafe)
+      }
+    }
   }
 
   override def doExecuteBroadcast[T](): broadcast.Broadcast[T] = {
@@ -78,11 +94,12 @@ case class DataToArrowColumnarExec(child: SparkPlan, numPartitions: Int) extends
   override def supportsColumnar: Boolean = true
 
   override lazy val metrics: Map[String, SQLMetric] = Map(
-    "numInputRows" -> SQLMetrics.createMetric(sparkContext, "number of input rows"),
+    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
     "numOutputBatches" -> SQLMetrics.createMetric(sparkContext, "output_batches"),
     "processTime" -> SQLMetrics.createTimingMetric(sparkContext, "totaltime_datatoarrowcolumnar"))
 
   override def doExecuteColumnar(): RDD[ColumnarBatch] = {
+    val numOutputBatches = longMetric("numOutputBatches")
     val inputByteBuf = child.executeBroadcast[Array[Array[Byte]]]()
     BroadcastColumnarRDD(sparkContext, metrics, numPartitions, inputByteBuf)
   }

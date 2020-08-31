@@ -183,11 +183,17 @@ case class ColumnarPreOverrides(conf: SparkConf) extends Rule[SparkPlan] {
       }
       if (columnarConf.enableColumnarBroadcastJoin) {
         var (buildPlan, streamedPlan) = getJoinPlan(plan)
+        val originalLeft = plan.left
+        val originalRight = plan.right
         buildPlan = buildPlan match {
-          case curPlan: BroadcastQueryStageExec
-              if curPlan.plan.isInstanceOf[BroadcastExchangeExec] =>
-            val originalBroadcastPlan = curPlan.plan.asInstanceOf[BroadcastExchangeExec]
-            BroadcastExchangeExec(originalBroadcastPlan.mode, DataToArrowColumnarExec(curPlan, 1))
+          case curPlan: BroadcastQueryStageExec =>
+            fallBackBroadcastQueryStage(curPlan)
+          case WholeStageCodegenExec(curPlan: ColumnarToRowExec)
+              if (curPlan.child.isInstanceOf[BroadcastQueryStageExec]) =>
+            fallBackBroadcastQueryStage(curPlan.child.asInstanceOf[BroadcastQueryStageExec])
+          case curPlan: ColumnarToRowExec
+              if (curPlan.child.isInstanceOf[BroadcastQueryStageExec]) =>
+            fallBackBroadcastQueryStage(curPlan.child.asInstanceOf[BroadcastQueryStageExec])
           case _ =>
             replaceWithColumnarPlan(buildPlan)
         }
@@ -198,17 +204,17 @@ case class ColumnarPreOverrides(conf: SparkConf) extends Rule[SparkPlan] {
             plan.withNewChildren(List(replaceWithColumnarPlan(streamedPlan), buildPlan))
         }
 
-        val left = if (plan.left.isInstanceOf[BroadcastExchangeExec]) {
-          val child = plan.left.asInstanceOf[BroadcastExchangeExec]
+        val left = if (originalLeft.isInstanceOf[BroadcastExchangeExec]) {
+          val child = originalLeft.asInstanceOf[BroadcastExchangeExec]
           new ColumnarBroadcastExchangeExec(child.mode, replaceWithColumnarPlan(child.child))
         } else {
-          replaceWithColumnarPlan(plan.left)
+          replaceWithColumnarPlan(originalLeft)
         }
-        val right = if (plan.right.isInstanceOf[BroadcastExchangeExec]) {
-          val child = plan.right.asInstanceOf[BroadcastExchangeExec]
+        val right = if (originalRight.isInstanceOf[BroadcastExchangeExec]) {
+          val child = originalRight.asInstanceOf[BroadcastExchangeExec]
           new ColumnarBroadcastExchangeExec(child.mode, replaceWithColumnarPlan(child.child))
         } else {
-          replaceWithColumnarPlan(plan.right)
+          replaceWithColumnarPlan(originalRight)
         }
         logDebug(s"Columnar Processing for ${plan.getClass} is currently supported.")
         try {
@@ -342,13 +348,16 @@ case class ColumnarPreOverrides(conf: SparkConf) extends Rule[SparkPlan] {
         val (doConvert, child) = optimizeJoin(level + 1, streamPlan)
         val newPlan = if (doConvert) {
           buildPlan = buildPlan match {
-            case curPlan: BroadcastQueryStageExec
-                if curPlan.plan.isInstanceOf[BroadcastExchangeExec] =>
-              val originalBroadcastPlan = curPlan.plan.asInstanceOf[BroadcastExchangeExec]
-              BroadcastExchangeExec(
-                originalBroadcastPlan.mode,
-                DataToArrowColumnarExec(curPlan, 1))
+            case curPlan: BroadcastQueryStageExec =>
+              fallBackBroadcastQueryStage(curPlan)
+            case WholeStageCodegenExec(curPlan: ColumnarToRowExec)
+                if (curPlan.child.isInstanceOf[BroadcastQueryStageExec]) =>
+              fallBackBroadcastQueryStage(curPlan.child.asInstanceOf[BroadcastQueryStageExec])
+            case curPlan: ColumnarToRowExec
+                if (curPlan.child.isInstanceOf[BroadcastQueryStageExec]) =>
+              fallBackBroadcastQueryStage(curPlan.child.asInstanceOf[BroadcastQueryStageExec])
             case _ =>
+              System.out.println(s"BroadcastHashJoinExec buildPlan is ${buildPlan}")
               replaceWithColumnarPlan(buildPlan)
           }
           join.buildSide match {
@@ -391,6 +400,25 @@ case class ColumnarPreOverrides(conf: SparkConf) extends Rule[SparkPlan] {
         } else {
           (false, plan)
         }
+    }
+  }
+
+  def fallBackBroadcastQueryStage(curPlan: BroadcastQueryStageExec): BroadcastQueryStageExec = {
+    curPlan.plan match {
+      case originalBroadcastPlan: ColumnarBroadcastExchangeExec =>
+        BroadcastQueryStageExec(
+          curPlan.id,
+          BroadcastExchangeExec(
+            originalBroadcastPlan.mode,
+            DataToArrowColumnarExec(originalBroadcastPlan, 1)))
+      case ReusedExchangeExec(_, originalBroadcastPlan: ColumnarBroadcastExchangeExec) =>
+        BroadcastQueryStageExec(
+          curPlan.id,
+          BroadcastExchangeExec(
+            originalBroadcastPlan.mode,
+            DataToArrowColumnarExec(curPlan.plan, 1)))
+      case _ =>
+        curPlan
     }
   }
 

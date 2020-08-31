@@ -130,5 +130,12 @@ class ColumnarBroadcastExchangeExec(mode: BroadcastMode, child: SparkPlan)
       }
     }
   }
+  override def canEqual(other: Any): Boolean = other.isInstanceOf[ColumnarBroadcastExchangeExec]
+
+  override def equals(other: Any): Boolean = other match {
+    case that: ColumnarBroadcastExchangeExec =>
+      (that canEqual this) && super.equals(that)
+    case _ => false
+  }
 
 }
