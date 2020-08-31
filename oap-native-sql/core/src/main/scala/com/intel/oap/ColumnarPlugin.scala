@@ -183,30 +183,20 @@ case class ColumnarPreOverrides(conf: SparkConf) extends Rule[SparkPlan] {
       }
       if (columnarConf.enableColumnarBroadcastJoin) {
         var (buildPlan, streamedPlan) = getJoinPlan(plan)
-        val numPartitions = streamedPlan match {
-          case shufflePlan: CustomShuffleReaderExec =>
-            shufflePlan.partitionSpecs.length
+        buildPlan = buildPlan match {
+          case curPlan: BroadcastQueryStageExec
+              if curPlan.plan.isInstanceOf[BroadcastExchangeExec] =>
+            val originalBroadcastPlan = curPlan.plan.asInstanceOf[BroadcastExchangeExec]
+            BroadcastExchangeExec(originalBroadcastPlan.mode, DataToArrowColumnarExec(curPlan, 1))
           case _ =>
-            streamedPlan.outputPartitioning.numPartitions
+            replaceWithColumnarPlan(buildPlan)
         }
-        val o_left = if (plan.left.isInstanceOf[BroadcastQueryStageExec]) {
-          DataToArrowColumnarExec(replaceWithColumnarPlan(plan.left), numPartitions)
-        } else {
-          replaceWithColumnarPlan(plan.left)
+        var newPlan = plan.buildSide match {
+          case BuildLeft =>
+            plan.withNewChildren(List(buildPlan, replaceWithColumnarPlan(streamedPlan)))
+          case BuildRight =>
+            plan.withNewChildren(List(replaceWithColumnarPlan(streamedPlan), buildPlan))
         }
-        val o_right = if (plan.right.isInstanceOf[BroadcastQueryStageExec]) {
-          DataToArrowColumnarExec(replaceWithColumnarPlan(plan.right), numPartitions)
-        } else {
-          replaceWithColumnarPlan(plan.right)
-        }
-        var newPlan: SparkPlan = new ShuffledHashJoinExec(
-          plan.leftKeys,
-          plan.rightKeys,
-          plan.joinType,
-          plan.buildSide,
-          plan.condition,
-          o_left,
-          o_right)
 
         val left = if (plan.left.isInstanceOf[BroadcastExchangeExec]) {
           val child = plan.left.asInstanceOf[BroadcastExchangeExec]
