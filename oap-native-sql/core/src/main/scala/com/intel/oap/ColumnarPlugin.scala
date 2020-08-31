@@ -188,12 +188,6 @@ case class ColumnarPreOverrides(conf: SparkConf) extends Rule[SparkPlan] {
         buildPlan = buildPlan match {
           case curPlan: BroadcastQueryStageExec =>
             fallBackBroadcastQueryStage(curPlan)
-          case WholeStageCodegenExec(curPlan: ColumnarToRowExec)
-              if (curPlan.child.isInstanceOf[BroadcastQueryStageExec]) =>
-            fallBackBroadcastQueryStage(curPlan.child.asInstanceOf[BroadcastQueryStageExec])
-          case curPlan: ColumnarToRowExec
-              if (curPlan.child.isInstanceOf[BroadcastQueryStageExec]) =>
-            fallBackBroadcastQueryStage(curPlan.child.asInstanceOf[BroadcastQueryStageExec])
           case _ =>
             replaceWithColumnarPlan(buildPlan)
         }
@@ -350,14 +344,7 @@ case class ColumnarPreOverrides(conf: SparkConf) extends Rule[SparkPlan] {
           buildPlan = buildPlan match {
             case curPlan: BroadcastQueryStageExec =>
               fallBackBroadcastQueryStage(curPlan)
-            case WholeStageCodegenExec(curPlan: ColumnarToRowExec)
-                if (curPlan.child.isInstanceOf[BroadcastQueryStageExec]) =>
-              fallBackBroadcastQueryStage(curPlan.child.asInstanceOf[BroadcastQueryStageExec])
-            case curPlan: ColumnarToRowExec
-                if (curPlan.child.isInstanceOf[BroadcastQueryStageExec]) =>
-              fallBackBroadcastQueryStage(curPlan.child.asInstanceOf[BroadcastQueryStageExec])
             case _ =>
-              System.out.println(s"BroadcastHashJoinExec buildPlan is ${buildPlan}")
               replaceWithColumnarPlan(buildPlan)
           }
           join.buildSide match {
