@@ -56,6 +56,12 @@ case class ColumnarPreOverrides(conf: SparkConf) extends Rule[SparkPlan] {
       logDebug(s"Columnar Processing for ${plan.getClass} is currently supported.")
       new ColumnarBatchScanExec(plan.output, plan.scan)
     case plan: ProjectExec =>
+      if (!columnarConf.enablePreferColumnar) {
+        val (doConvert, child) = optimizeJoin(0, plan)
+        if (doConvert) {
+          return child
+        }
+      }
       //new ColumnarProjectExec(plan.projectList, replaceWithColumnarPlan(plan.child))
       val columnarPlan = replaceWithColumnarPlan(plan.child)
       logDebug(s"Columnar Processing for ${plan.getClass} is currently supported.")
@@ -378,6 +384,22 @@ case class ColumnarPreOverrides(conf: SparkConf) extends Rule[SparkPlan] {
           project.withNewChildren(List(child))
         } else {
           project
+        }
+        (doConvert, newPlan)
+      case filter: FilterExec =>
+        val (doConvert, child) = optimizeJoin(level + 1, filter.child)
+        val newPlan = if (doConvert) {
+          filter.withNewChildren(List(child))
+        } else {
+          filter
+        }
+        (doConvert, newPlan)
+      case aggr: HashAggregateExec =>
+        val (doConvert, child) = optimizeJoin(level + 1, aggr.child)
+        val newPlan = if (doConvert) {
+          aggr.withNewChildren(List(child))
+        } else {
+          aggr
         }
         (doConvert, newPlan)
 
