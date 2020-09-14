@@ -55,12 +55,13 @@ import com.google.common.collect.Lists;
 import com.intel.oap.expression._
 import com.intel.oap.vectorized.ExpressionEvaluator
 import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
-import org.apache.spark.sql.execution.joins.{BuildLeft, BuildRight, BuildSide}
+import org.apache.spark.sql.execution.joins.{BuildLeft, BuildRight, BuildSide, HashJoin}
+import org.apache.spark.sql.types.{StructField, StructType}
 
 /**
  * Performs a hash join of two child relations by first shuffling the data using the join keys.
  */
-class ColumnarBroadcastHashJoinExec(
+case class ColumnarBroadcastHashJoinExec(
     leftKeys: Seq[Expression],
     rightKeys: Seq[Expression],
     joinType: JoinType,
@@ -68,14 +69,9 @@ class ColumnarBroadcastHashJoinExec(
     condition: Option[Expression],
     left: SparkPlan,
     right: SparkPlan)
-    extends BroadcastHashJoinExec(
-      leftKeys,
-      rightKeys,
-      joinType,
-      buildSide,
-      condition,
-      left,
-      right) {
+    extends BinaryExecNode
+    with ColumnarCodegenSupport
+    with HashJoin {
 
   val sparkConf = sparkContext.getConf
   override lazy val metrics = Map(
@@ -86,7 +82,14 @@ class ColumnarBroadcastHashJoinExec(
     "joinTime" -> SQLMetrics.createTimingMetric(sparkContext, "join time"))
 
   override def supportsColumnar = true
-  override def supportCodegen: Boolean = false
+  override protected def doExecute(): RDD[InternalRow] = {
+    throw new UnsupportedOperationException(
+      s"ColumnarBroadcastHashJoinExec doesn't support doExecute")
+  }
+  override def inputRDDs(): Seq[RDD[ColumnarBatch]] = {
+    throw new UnsupportedOperationException
+  }
+  override def supportColumnarCodegen: Boolean = true
 
   val numOutputRows = longMetric("numOutputRows")
   val totalTime = longMetric("totalTime")
@@ -94,11 +97,19 @@ class ColumnarBroadcastHashJoinExec(
   val buildTime = longMetric("buildTime")
   val fetchTime = longMetric("fetchTime")
   val resultSchema = this.schema
+  /*if (resultOutput != null) {
+    StructType(resultOutput.map(a => {
+      val attr = ConverterUtils.getAttrFromExpr(a)
+      StructField(attr.name, attr.dataType, attr.nullable, attr.metadata)
+    }))
+  } else {
+    this.schema
+  }*/
 
   //TODO() Disable code generation
   //override def supportCodegen: Boolean = false
 
-  val signature =
+  def getSignature: String =
     if (resultSchema.size > 0) {
       try {
         ColumnarShuffledHashJoin.prebuild(
@@ -116,24 +127,30 @@ class ColumnarBroadcastHashJoinExec(
             if e.getMessage == "Unsupport to generate native expression from replaceable expression." =>
           logWarning(e.getMessage())
           ""
-        case e =>
+        case e: Throwable =>
           throw e
       }
     } else {
       ""
     }
-  val listJars = if (signature != "") {
-    if (sparkContext.listJars.filter(path => path.contains(s"${signature}.jar")).isEmpty) {
-      val tempDir = ColumnarPluginConfig.getRandomTempDir
-      val jarFileName =
-        s"${tempDir}/tmp/spark-columnar-plugin-codegen-precompile-${signature}.jar"
-      sparkContext.addJar(jarFileName)
+  def getListJars: List[String] =
+    if (signature != "") {
+      if (sparkContext.listJars.filter(path => path.contains(s"${signature}.jar")).isEmpty) {
+        val tempDir = ColumnarPluginConfig.getRandomTempDir
+        val jarFileName =
+          s"${tempDir}/tmp/spark-columnar-plugin-codegen-precompile-${signature}.jar"
+        sparkContext.addJar(jarFileName)
+      }
+      sparkContext.listJars.filter(path => path.contains(s"${signature}.jar"))
+    } else {
+      List()
     }
-    sparkContext.listJars.filter(path => path.contains(s"${signature}.jar"))
+
+  var (signature, listJars) = if (supportColumnarCodegen && sparkConf.wholeStageEnabled) {
+    (null, null)
   } else {
-    List()
+    (getSignature, getListJars)
   }
-  listJars.foreach(jar => logInfo(s"Uploaded ${jar}"))
 
   override def doExecuteColumnar(): RDD[ColumnarBatch] = {
     val buildInputByteBuf = buildPlan.executeBroadcast[Array[Array[Byte]]]()

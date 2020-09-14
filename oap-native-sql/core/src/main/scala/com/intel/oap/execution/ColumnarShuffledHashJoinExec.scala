@@ -53,12 +53,12 @@ import com.google.common.collect.Lists;
 import com.intel.oap.expression._
 import com.intel.oap.vectorized.ExpressionEvaluator
 import org.apache.spark.sql.execution.joins.ShuffledHashJoinExec
-import org.apache.spark.sql.execution.joins.{BuildLeft, BuildRight, BuildSide}
+import org.apache.spark.sql.execution.joins.{BuildLeft, BuildRight, BuildSide, HashJoin}
 
 /**
  * Performs a hash join of two child relations by first shuffling the data using the join keys.
  */
-class ColumnarShuffledHashJoinExec(
+case class ColumnarShuffledHashJoinExec(
     leftKeys: Seq[Expression],
     rightKeys: Seq[Expression],
     joinType: JoinType,
@@ -66,7 +66,9 @@ class ColumnarShuffledHashJoinExec(
     condition: Option[Expression],
     left: SparkPlan,
     right: SparkPlan)
-    extends ShuffledHashJoinExec(leftKeys, rightKeys, joinType, buildSide, condition, left, right) {
+    extends BinaryExecNode
+    with ColumnarCodegenSupport
+    with HashJoin {
 
   val sparkConf = sparkContext.getConf
   override lazy val metrics = Map(
@@ -76,7 +78,20 @@ class ColumnarShuffledHashJoinExec(
     "buildTime" -> SQLMetrics.createTimingMetric(sparkContext, "time to build hash map"),
     "joinTime" -> SQLMetrics.createTimingMetric(sparkContext, "join time"))
 
+  override protected def doExecute(): RDD[InternalRow] = {
+    throw new UnsupportedOperationException(
+      s"ColumnarShuffledHashJoinExec doesn't support doExecute")
+  }
   override def supportsColumnar = true
+  override def inputRDDs(): Seq[RDD[ColumnarBatch]] = {
+    throw new UnsupportedOperationException
+  }
+  override def supportColumnarCodegen: Boolean = true
+
+  override protected def doExecute(): RDD[InternalRow] = {
+    throw new UnsupportedOperationException(
+      s"ColumnarShuffledHashJoinExec doesn't support doExecute")
+  }
 
   val numOutputRows = longMetric("numOutputRows")
   val totalTime = longMetric("totalTime")
@@ -85,10 +100,7 @@ class ColumnarShuffledHashJoinExec(
   val fetchTime = longMetric("fetchTime")
   val resultSchema = this.schema
 
-  //TODO() Disable code generation
-  //override def supportCodegen: Boolean = false
-
-  val signature =
+  def getSignature: String =
     if (resultSchema.size > 0) {
       try {
         ColumnarShuffledHashJoin.prebuild(
@@ -106,24 +118,30 @@ class ColumnarShuffledHashJoinExec(
             if e.getMessage == "Unsupport to generate native expression from replaceable expression." =>
           logWarning(e.getMessage())
           ""
-        case e =>
+        case e: Throwable =>
           throw e
       }
     } else {
       ""
     }
-  val listJars = if (signature != "") {
-    if (sparkContext.listJars.filter(path => path.contains(s"${signature}.jar")).isEmpty) {
-      val tempDir = ColumnarPluginConfig.getRandomTempDir
-      val jarFileName =
-        s"${tempDir}/tmp/spark-columnar-plugin-codegen-precompile-${signature}.jar"
-      sparkContext.addJar(jarFileName)
+  def getListJars: List[String] =
+    if (signature != "") {
+      if (sparkContext.listJars.filter(path => path.contains(s"${signature}.jar")).isEmpty) {
+        val tempDir = ColumnarPluginConfig.getRandomTempDir
+        val jarFileName =
+          s"${tempDir}/tmp/spark-columnar-plugin-codegen-precompile-${signature}.jar"
+        sparkContext.addJar(jarFileName)
+      }
+      sparkContext.listJars.filter(path => path.contains(s"${signature}.jar"))
+    } else {
+      List()
     }
-    sparkContext.listJars.filter(path => path.contains(s"${signature}.jar"))
+
+  var (signature, listJars) = if (supportColumnarCodegen && sparkConf.wholeStageEnabled) {
+    (null, null)
   } else {
-    List()
+    (getSignature, getListJars)
   }
-  listJars.foreach(jar => logInfo(s"Uploaded ${jar}"))
 
   override def doExecuteColumnar(): RDD[ColumnarBatch] = {
     streamedPlan.executeColumnar().zipPartitions(buildPlan.executeColumnar()) {

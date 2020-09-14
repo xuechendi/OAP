@@ -30,8 +30,14 @@ import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.TaskContext
 
-case class ColumnarConditionProjectExec(condition: Expression, projectList: Seq[Expression], child: SparkPlan)
-  extends UnaryExecNode with CodegenSupport with PredicateHelper with Logging {
+case class ColumnarConditionProjectExec(
+    condition: Expression,
+    projectList: Seq[Expression],
+    child: SparkPlan)
+    extends UnaryExecNode
+    with ColumnarCodegenSupport
+    with PredicateHelper
+    with Logging {
 
   def isNullIntolerant(expr: Expression): Boolean = expr match {
     case e: NullIntolerant => e.children.forall(isNullIntolerant)
@@ -47,43 +53,37 @@ case class ColumnarConditionProjectExec(condition: Expression, projectList: Seq[
   } else {
     null
   }
-  override def output: Seq[Attribute] = if (projectList != null) {
-    val res = projectList.map(expr => ConverterUtils.getAttrFromExpr(expr))
-    res
-  } else if (condition != null){
-    val res = child.output.map { a =>
-      if (a.nullable && notNullAttributes.contains(a.exprId)) {
-        a.withNullability(false)
-      } else {
-        a
+  override def output: Seq[Attribute] =
+    if (projectList != null) {
+      val res = projectList.map(expr => ConverterUtils.getAttrFromExpr(expr))
+      res
+    } else if (condition != null) {
+      val res = child.output.map { a =>
+        if (a.nullable && notNullAttributes.contains(a.exprId)) {
+          a.withNullability(false)
+        } else {
+          a
+        }
       }
+      res
+    } else {
+      val res = child.output.map { a => a }
+      res
     }
-    res
-  } else {
-    val res = child.output.map { a =>
-      a
-    }
-    res
-  }
 
-  override def inputRDDs(): Seq[RDD[InternalRow]] = {
-    child.asInstanceOf[CodegenSupport].inputRDDs()
+  override def inputRDDs(): Seq[RDD[ColumnarBatch]] = {
+    throw new UnsupportedOperationException
   }
-
-  protected override def doProduce(ctx: CodegenContext): String = {
-    child.asInstanceOf[CodegenSupport].produce(ctx, this)
-  }
+  override def supportColumnarCodegen: Boolean = true
 
   override def canEqual(that: Any): Boolean = false
 
-  protected override def doExecute(): org.apache.spark.rdd.RDD[org.apache.spark.sql.catalyst.InternalRow] = {
+  protected override def doExecute()
+      : org.apache.spark.rdd.RDD[org.apache.spark.sql.catalyst.InternalRow] = {
     throw new UnsupportedOperationException(s"This operator doesn't support doExecute().")
   }
 
   override def supportsColumnar = true
-
-  // Disable code generation
-  override def supportCodegen: Boolean = false
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
