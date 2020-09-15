@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, SortOrder}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.execution.joins.{BuildLeft, BuildRight}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.internal.SQLConf
@@ -120,6 +121,21 @@ case class ColumnarCollapseCodegenStages(
     case _ => false
   }
 
+  private def existsJoins(plan: SparkPlan, count: Int = 0): Boolean = plan match {
+    case p: ColumnarBroadcastHashJoinExec =>
+      if (p.condition.isDefined) return true
+      if (count >= 1) true
+      else plan.children.map(existsJoins(_, count + 1)).exists(_ == true)
+    case p: ColumnarShuffledHashJoinExec =>
+      if (p.condition.isDefined) return true
+      if (count >= 1) true
+      else plan.children.map(existsJoins(_, count + 1)).exists(_ == true)
+    case p: ColumnarCodegenSupport if p.supportColumnarCodegen =>
+      plan.children.map(existsJoins(_, count)).exists(_ == true)
+    case _ =>
+      false
+  }
+
   /**
    * Inserts an InputAdapter on top of those that do not support codegen.
    */
@@ -128,6 +144,18 @@ case class ColumnarCollapseCodegenStages(
       case p if !supportCodegen(p) =>
         // collapse them recursively
         new ColumnarInputAdapter(insertWholeStageCodegen(p))
+      /*case p: ColumnarBroadcastHashJoinExec =>
+        val numPartitions = p.outputPartitioning.numPartitions
+        p.buildSide match {
+          case BuildLeft =>
+            p.withNewChildren(
+              Seq(DataToArrowColumnarExec(p.left, numPartitions), p.right)
+                .map(insertInputAdapter))
+          case BuildRight =>
+            p.withNewChildren(
+              Seq(p.left, DataToArrowColumnarExec(p.right, numPartitions))
+                .map(insertInputAdapter))
+        }*/
       /*case j: SortMergeJoinExec =>
         // The children of SortMergeJoin should do codegen separately.
         j.withNewChildren(j.children.map(child => InputAdapter(insertWholeStageCodegen(child))))*/
@@ -145,8 +173,8 @@ case class ColumnarCollapseCodegenStages(
       case plan
           if plan.output.length == 1 && plan.output.head.dataType.isInstanceOf[ObjectType] =>
         plan.withNewChildren(plan.children.map(insertWholeStageCodegen))
-      case plan: ColumnarCodegenSupport if supportCodegen(plan) =>
-        System.out.println(s"${plan.getClass} will use ColumnarWholeStageCodegenExec")
+      //case plan: ColumnarCodegenSupport if supportCodegen(plan) =>
+      case plan: ColumnarCodegenSupport if supportCodegen(plan) && existsJoins(plan) =>
         ColumnarWholeStageCodegenExec(insertInputAdapter(plan))(
           codegenStageCounter.incrementAndGet())
       case other =>

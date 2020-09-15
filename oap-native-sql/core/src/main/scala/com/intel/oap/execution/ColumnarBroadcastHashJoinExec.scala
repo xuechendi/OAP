@@ -27,7 +27,7 @@ import org.apache.spark.TaskContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.{Utils, UserAddedJarUtils}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical._
@@ -76,38 +76,95 @@ case class ColumnarBroadcastHashJoinExec(
   val sparkConf = sparkContext.getConf
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
-    "totalTime" -> SQLMetrics.createTimingMetric(sparkContext, "totaltime_broadcastHasedJoin"),
+    "processTime" -> SQLMetrics.createTimingMetric(sparkContext, "totaltime_broadcastHasedJoin"),
     "fetchTime" -> SQLMetrics.createTimingMetric(sparkContext, "time to fetch buildSide batch"),
     "buildTime" -> SQLMetrics.createTimingMetric(sparkContext, "time to build hash map"),
     "joinTime" -> SQLMetrics.createTimingMetric(sparkContext, "join time"))
 
+  val numOutputRows = longMetric("numOutputRows")
+  val totalTime = longMetric("processTime")
+  val joinTime = longMetric("joinTime")
+  val buildTime = longMetric("buildTime")
+  val fetchTime = longMetric("fetchTime")
+  val resultSchema = this.schema
+  val (buildKeyExprs, streamedKeyExprs) = buildSide match {
+    case BuildLeft =>
+      (leftKeys, rightKeys)
+    case _ =>
+      (rightKeys, leftKeys)
+  }
+  def getBuildPlan: SparkPlan = buildPlan
   override def supportsColumnar = true
   override protected def doExecute(): RDD[InternalRow] = {
     throw new UnsupportedOperationException(
       s"ColumnarBroadcastHashJoinExec doesn't support doExecute")
   }
-  override def inputRDDs(): Seq[RDD[ColumnarBatch]] = {
-    throw new UnsupportedOperationException
+  override def inputRDDs(): Seq[RDD[ColumnarBatch]] = streamedPlan match {
+    case c: ColumnarCodegenSupport if c.supportColumnarCodegen == true =>
+      c.inputRDDs
+    case _ =>
+      Seq(streamedPlan.executeColumnar())
   }
+  override def getHashBuildPlans: Seq[SparkPlan] = streamedPlan match {
+    case c: ColumnarCodegenSupport if c.supportColumnarCodegen == true =>
+      val childPlans = c.getHashBuildPlans
+      childPlans :+ this
+    case _ =>
+      Seq(this)
+  }
+
+  override def dependentPlanCtx: ColumnarCodegenContext = {
+    val inputSchema = ConverterUtils.toArrowSchema(buildPlan.output)
+    ColumnarCodegenContext(
+      inputSchema,
+      null,
+      ColumnarConditionedProbeJoin.prepareHashBuildFunction(buildKeyExprs, buildPlan.output))
+  }
+
   override def supportColumnarCodegen: Boolean = true
 
-  val numOutputRows = longMetric("numOutputRows")
-  val totalTime = longMetric("totalTime")
-  val joinTime = longMetric("joinTime")
-  val buildTime = longMetric("buildTime")
-  val fetchTime = longMetric("fetchTime")
-  val resultSchema = this.schema
-  /*if (resultOutput != null) {
-    StructType(resultOutput.map(a => {
-      val attr = ConverterUtils.getAttrFromExpr(a)
-      StructField(attr.name, attr.dataType, attr.nullable, attr.metadata)
-    }))
-  } else {
-    this.schema
-  }*/
+  def getKernelFunction: TreeNode = {
 
-  //TODO() Disable code generation
-  //override def supportCodegen: Boolean = false
+    val buildInputAttributes: List[Attribute] = buildPlan.output.toList
+    val streamInputAttributes: List[Attribute] = streamedPlan.output.toList
+
+    ColumnarConditionedProbeJoin.prepareKernelFunction(
+      buildKeyExprs,
+      streamedKeyExprs,
+      buildInputAttributes,
+      streamInputAttributes,
+      output,
+      joinType,
+      buildSide,
+      condition)
+  }
+
+  override def doCodeGen: ColumnarCodegenContext = {
+    val childCtx = streamedPlan match {
+      case c: ColumnarCodegenSupport if c.supportColumnarCodegen == true =>
+        c.doCodeGen
+      case _ =>
+        null
+    }
+    val outputSchema = ConverterUtils.toArrowSchema(output)
+    val (codeGenNode, inputSchema) = if (childCtx != null) {
+      (
+        TreeBuilder.makeFunction(
+          s"child",
+          Lists.newArrayList(getKernelFunction, childCtx.root),
+          new ArrowType.Int(32, true)),
+        childCtx.inputSchema)
+    } else {
+      (
+        TreeBuilder
+          .makeFunction(
+            s"child",
+            Lists.newArrayList(getKernelFunction),
+            new ArrowType.Int(32, true)),
+        ConverterUtils.toArrowSchema(streamedPlan.output))
+    }
+    ColumnarCodegenContext(inputSchema, outputSchema, codeGenNode)
+  }
 
   def getSignature: String =
     if (resultSchema.size > 0) {
@@ -125,7 +182,6 @@ case class ColumnarBroadcastHashJoinExec(
       } catch {
         case e: UnsupportedOperationException
             if e.getMessage == "Unsupport to generate native expression from replaceable expression." =>
-          logWarning(e.getMessage())
           ""
         case e: Throwable =>
           throw e
@@ -133,7 +189,7 @@ case class ColumnarBroadcastHashJoinExec(
     } else {
       ""
     }
-  def getListJars: List[String] =
+  def getListJars: Seq[String] =
     if (signature != "") {
       if (sparkContext.listJars.filter(path => path.contains(s"${signature}.jar")).isEmpty) {
         val tempDir = ColumnarPluginConfig.getRandomTempDir
@@ -143,16 +199,20 @@ case class ColumnarBroadcastHashJoinExec(
       }
       sparkContext.listJars.filter(path => path.contains(s"${signature}.jar"))
     } else {
-      List()
+      Seq()
     }
 
-  var (signature, listJars) = if (supportColumnarCodegen && sparkConf.wholeStageEnabled) {
-    (null, null)
-  } else {
-    (getSignature, getListJars)
-  }
+  var (signature, listJars) =
+    if (supportColumnarCodegen && sparkConf
+          .getBoolean("spark.sql.codegen.wholeStage", defaultValue = true)) {
+      (null, null)
+    } else {
+      (getSignature, getListJars)
+    }
 
   override def doExecuteColumnar(): RDD[ColumnarBatch] = {
+    signature = if (signature == null) getSignature else signature
+    listJars = if (listJars == null) getListJars else listJars
     val buildInputByteBuf = buildPlan.executeBroadcast[Array[Array[Byte]]]()
     streamedPlan.executeColumnar().mapPartitions { streamIter =>
       ColumnarPluginConfig.getConf(sparkConf)

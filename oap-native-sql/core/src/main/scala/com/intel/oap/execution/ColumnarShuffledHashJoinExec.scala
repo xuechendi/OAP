@@ -73,32 +73,105 @@ case class ColumnarShuffledHashJoinExec(
   val sparkConf = sparkContext.getConf
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
-    "totalTime" -> SQLMetrics.createTimingMetric(sparkContext, "totaltime_hashjoin"),
+    "processTime" -> SQLMetrics.createTimingMetric(sparkContext, "totaltime_hashjoin"),
     "fetchTime" -> SQLMetrics.createTimingMetric(sparkContext, "time to fetch batches"),
     "buildTime" -> SQLMetrics.createTimingMetric(sparkContext, "time to build hash map"),
     "joinTime" -> SQLMetrics.createTimingMetric(sparkContext, "join time"))
 
+  val numOutputRows = longMetric("numOutputRows")
+  val totalTime = longMetric("processTime")
+  val joinTime = longMetric("joinTime")
+  val buildTime = longMetric("buildTime")
+  val fetchTime = longMetric("fetchTime")
+  val resultSchema = this.schema
+
+  val (buildKeyExprs, streamedKeyExprs) = buildSide match {
+    case BuildLeft =>
+      (leftKeys, rightKeys)
+    case _ =>
+      (rightKeys, leftKeys)
+  }
+
+  /*protected lazy val (buildPlan, streamedPlan, buildKeys, streamKeys) = buildSide match {
+    case BuildLeft => (left, right, leftKeys, rightKeys)
+    case BuildRight => (right, left, rightKeys, leftKeys)
+  }*/
+
+  def getBuildPlan: SparkPlan = buildPlan
   override protected def doExecute(): RDD[InternalRow] = {
     throw new UnsupportedOperationException(
       s"ColumnarShuffledHashJoinExec doesn't support doExecute")
   }
   override def supportsColumnar = true
-  override def inputRDDs(): Seq[RDD[ColumnarBatch]] = {
-    throw new UnsupportedOperationException
+  override def inputRDDs(): Seq[RDD[ColumnarBatch]] = streamedPlan match {
+    case c: ColumnarCodegenSupport if c.supportColumnarCodegen == true =>
+      c.inputRDDs
+    case _ =>
+      Seq(streamedPlan.executeColumnar())
   }
+  override def getHashBuildPlans: Seq[SparkPlan] = streamedPlan match {
+    case c: ColumnarCodegenSupport if c.supportColumnarCodegen == true =>
+      val childPlans = c.getHashBuildPlans
+      childPlans :+ this
+    case _ =>
+      Seq(this)
+  }
+
+  override def dependentPlanCtx: ColumnarCodegenContext = {
+    val inputSchema = ConverterUtils.toArrowSchema(buildPlan.output)
+    ColumnarCodegenContext(
+      inputSchema,
+      null,
+      ColumnarConditionedProbeJoin.prepareHashBuildFunction(buildKeyExprs, buildPlan.output))
+  }
+
   override def supportColumnarCodegen: Boolean = true
 
-  override protected def doExecute(): RDD[InternalRow] = {
-    throw new UnsupportedOperationException(
-      s"ColumnarShuffledHashJoinExec doesn't support doExecute")
+  def getKernelFunction: TreeNode = {
+
+    val buildInputAttributes = buildPlan.output.toList
+    val streamInputAttributes = streamedPlan.output.toList
+    // For Join, we need to do two things
+    // 1. create buildHashRelation RDD ?
+    // 2. create streamCodeGen and return
+
+    ColumnarConditionedProbeJoin.prepareKernelFunction(
+      buildKeyExprs,
+      streamedKeyExprs,
+      buildInputAttributes,
+      streamInputAttributes,
+      output,
+      joinType,
+      buildSide,
+      condition)
   }
 
-  val numOutputRows = longMetric("numOutputRows")
-  val totalTime = longMetric("totalTime")
-  val joinTime = longMetric("joinTime")
-  val buildTime = longMetric("buildTime")
-  val fetchTime = longMetric("fetchTime")
-  val resultSchema = this.schema
+  override def doCodeGen: ColumnarCodegenContext = {
+    val childCtx = streamedPlan match {
+      case c: ColumnarCodegenSupport if c.supportColumnarCodegen == true =>
+        c.doCodeGen
+      case _ =>
+        null
+    }
+    val outputSchema = ConverterUtils.toArrowSchema(output)
+    val (codeGenNode, inputSchema) = if (childCtx != null) {
+      (
+        TreeBuilder.makeFunction(
+          s"child",
+          Lists.newArrayList(getKernelFunction, childCtx.root),
+          new ArrowType.Int(32, true)),
+        childCtx.inputSchema)
+    } else {
+      (
+        TreeBuilder
+          .makeFunction(
+            s"child",
+            Lists.newArrayList(getKernelFunction),
+            new ArrowType.Int(32, true)),
+        ConverterUtils.toArrowSchema(streamedPlan.output))
+    }
+    ColumnarCodegenContext(inputSchema, outputSchema, codeGenNode)
+  }
 
   def getSignature: String =
     if (resultSchema.size > 0) {
@@ -124,7 +197,7 @@ case class ColumnarShuffledHashJoinExec(
     } else {
       ""
     }
-  def getListJars: List[String] =
+  def getListJars: Seq[String] =
     if (signature != "") {
       if (sparkContext.listJars.filter(path => path.contains(s"${signature}.jar")).isEmpty) {
         val tempDir = ColumnarPluginConfig.getRandomTempDir
@@ -134,20 +207,22 @@ case class ColumnarShuffledHashJoinExec(
       }
       sparkContext.listJars.filter(path => path.contains(s"${signature}.jar"))
     } else {
-      List()
+      Seq()
     }
 
-  var (signature, listJars) = if (supportColumnarCodegen && sparkConf.wholeStageEnabled) {
-    (null, null)
-  } else {
-    (getSignature, getListJars)
-  }
+  var (signature, listJars) =
+    if (supportColumnarCodegen && sparkConf
+          .getBoolean("spark.sql.codegen.wholeStage", defaultValue = true)) {
+      (null, null)
+    } else {
+      (getSignature, getListJars)
+    }
 
   override def doExecuteColumnar(): RDD[ColumnarBatch] = {
+    signature = if (signature == null) getSignature else signature
+    listJars = if (listJars == null) getListJars else listJars
     streamedPlan.executeColumnar().zipPartitions(buildPlan.executeColumnar()) {
       (streamIter, buildIter) =>
-        //val hashed = buildHashedRelation(buildIter)
-        //join(streamIter, hashed, numOutputRows)
         ColumnarPluginConfig.getConf(sparkConf)
         val execTempDir = ColumnarPluginConfig.getTempFile
         val jarList = listJars
