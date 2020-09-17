@@ -24,6 +24,7 @@
 #include <gandiva/node.h>
 #include <gandiva/tree_expr_builder.h>
 
+#include "codegen/common/hash_relation.h"
 #include "codegen/common/result_iterator.h"
 
 using ArrayList = std::vector<std::shared_ptr<arrow::Array>>;
@@ -70,6 +71,12 @@ class KernalBase {
   virtual arrow::Status MakeResultIterator(
       std::shared_ptr<arrow::Schema> schema,
       std::shared_ptr<ResultIterator<arrow::RecordBatch>>* out) {
+    return arrow::Status::NotImplemented("MakeResultIterator is abstract interface for ",
+                                         kernel_name_);
+  }
+  virtual arrow::Status MakeResultIterator(
+      std::shared_ptr<arrow::Schema> schema,
+      std::shared_ptr<ResultIterator<HashRelation>>* out) {
     return arrow::Status::NotImplemented("MakeResultIterator is abstract interface for ",
                                          kernel_name_);
   }
@@ -231,7 +238,7 @@ class StddevSampPartialArrayKernel : public KernalBase {
                             std::shared_ptr<arrow::DataType> data_type,
                             std::shared_ptr<KernalBase>* out);
   StddevSampPartialArrayKernel(arrow::compute::FunctionContext* ctx,
-                 std::shared_ptr<arrow::DataType> data_type);
+                               std::shared_ptr<arrow::DataType> data_type);
   arrow::Status Evaluate(const ArrayList& in) override;
   arrow::Status Finish(ArrayList* out) override;
 
@@ -247,7 +254,7 @@ class StddevSampFinalArrayKernel : public KernalBase {
                             std::shared_ptr<arrow::DataType> data_type,
                             std::shared_ptr<KernalBase>* out);
   StddevSampFinalArrayKernel(arrow::compute::FunctionContext* ctx,
-                 std::shared_ptr<arrow::DataType> data_type);
+                             std::shared_ptr<arrow::DataType> data_type);
   arrow::Status Evaluate(const ArrayList& in) override;
   arrow::Status Finish(ArrayList* out) override;
 

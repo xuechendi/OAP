@@ -28,6 +28,7 @@
 #include <memory>
 
 #include "codegen/arrow_compute/ext/kernels_ext.h"
+#include "codegen/common/hash_relation.h"
 #include "codegen/common/result_iterator.h"
 #include "utils/macros.h"
 
@@ -64,9 +65,8 @@ class ExprVisitorImpl {
     return arrow::Status::OK();
   }
 
-  virtual arrow::Status MakeResultIterator(
-      std::shared_ptr<arrow::Schema> schema,
-      std::shared_ptr<ResultIterator<arrow::RecordBatch>>* out) {
+  virtual arrow::Status MakeResultIterator(std::shared_ptr<arrow::Schema> schema,
+                                           std::shared_ptr<ResultIteratorBase>* out) {
     return arrow::Status::NotImplemented("ExprVisitorImpl ", p_->func_name_,
                                          " MakeResultIterator is abstract.");
   }
@@ -165,12 +165,14 @@ class SplitArrayListWithActionVisitorImpl : public ExprVisitorImpl {
     return arrow::Status::OK();
   }
 
-  arrow::Status MakeResultIterator(
-      std::shared_ptr<arrow::Schema> schema,
-      std::shared_ptr<ResultIterator<arrow::RecordBatch>>* out) override {
+  arrow::Status MakeResultIterator(std::shared_ptr<arrow::Schema> schema,
+                                   std::shared_ptr<ResultIteratorBase>* out) override {
     switch (finish_return_type_) {
       case ArrowComputeResultType::Batch: {
-        TIME_MICRO_OR_RAISE(p_->elapse_time_, kernel_->MakeResultIterator(schema, out));
+        std::shared_ptr<ResultIterator<arrow::RecordBatch>> iter_out;
+        TIME_MICRO_OR_RAISE(p_->elapse_time_,
+                            kernel_->MakeResultIterator(schema, &iter_out));
+        *out = std::dynamic_pointer_cast<ResultIteratorBase>(iter_out);
         p_->return_type_ = ArrowComputeResultType::BatchIterator;
       } break;
       default:
@@ -426,12 +428,14 @@ class SortArraysToIndicesVisitorImpl : public ExprVisitorImpl {
     return arrow::Status::OK();
   }
 
-  arrow::Status MakeResultIterator(
-      std::shared_ptr<arrow::Schema> schema,
-      std::shared_ptr<ResultIterator<arrow::RecordBatch>>* out) override {
+  arrow::Status MakeResultIterator(std::shared_ptr<arrow::Schema> schema,
+                                   std::shared_ptr<ResultIteratorBase>* out) override {
     switch (finish_return_type_) {
       case ArrowComputeResultType::BatchIterator: {
-        TIME_MICRO_OR_RAISE(p_->elapse_time_, kernel_->MakeResultIterator(schema, out));
+        std::shared_ptr<ResultIterator<arrow::RecordBatch>> iter_out;
+        TIME_MICRO_OR_RAISE(p_->elapse_time_,
+                            kernel_->MakeResultIterator(schema, &iter_out));
+        *out = std::dynamic_pointer_cast<ResultIteratorBase>(iter_out);
         p_->return_type_ = ArrowComputeResultType::BatchIterator;
       } break;
       default:
@@ -509,12 +513,14 @@ class ConditionedProbeArraysVisitorImpl : public ExprVisitorImpl {
     return arrow::Status::OK();
   }
 
-  arrow::Status MakeResultIterator(
-      std::shared_ptr<arrow::Schema> schema,
-      std::shared_ptr<ResultIterator<arrow::RecordBatch>>* out) override {
+  arrow::Status MakeResultIterator(std::shared_ptr<arrow::Schema> schema,
+                                   std::shared_ptr<ResultIteratorBase>* out) override {
     switch (finish_return_type_) {
       case ArrowComputeResultType::BatchIterator: {
-        TIME_MICRO_OR_RAISE(p_->elapse_time_, kernel_->MakeResultIterator(schema, out));
+        std::shared_ptr<ResultIterator<arrow::RecordBatch>> iter_out;
+        TIME_MICRO_OR_RAISE(p_->elapse_time_,
+                            kernel_->MakeResultIterator(schema, &iter_out));
+        *out = std::dynamic_pointer_cast<ResultIteratorBase>(iter_out);
         p_->return_type_ = ArrowComputeResultType::Batch;
       } break;
       default:
@@ -597,12 +603,14 @@ class ConditionedJoinArraysVisitorImpl : public ExprVisitorImpl {
     return arrow::Status::OK();
   }
 
-  arrow::Status MakeResultIterator(
-      std::shared_ptr<arrow::Schema> schema,
-      std::shared_ptr<ResultIterator<arrow::RecordBatch>>* out) override {
+  arrow::Status MakeResultIterator(std::shared_ptr<arrow::Schema> schema,
+                                   std::shared_ptr<ResultIteratorBase>* out) override {
     switch (finish_return_type_) {
       case ArrowComputeResultType::BatchIterator: {
-        TIME_MICRO_OR_RAISE(p_->elapse_time_, kernel_->MakeResultIterator(schema, out));
+        std::shared_ptr<ResultIterator<arrow::RecordBatch>> iter_out;
+        TIME_MICRO_OR_RAISE(p_->elapse_time_,
+                            kernel_->MakeResultIterator(schema, &iter_out));
+        *out = std::dynamic_pointer_cast<ResultIteratorBase>(iter_out);
         p_->return_type_ = ArrowComputeResultType::Batch;
       } break;
       default:
@@ -674,12 +682,14 @@ class HashAggregateArraysVisitorImpl : public ExprVisitorImpl {
     return arrow::Status::OK();
   }
 
-  arrow::Status MakeResultIterator(
-      std::shared_ptr<arrow::Schema> schema,
-      std::shared_ptr<ResultIterator<arrow::RecordBatch>>* out) override {
+  arrow::Status MakeResultIterator(std::shared_ptr<arrow::Schema> schema,
+                                   std::shared_ptr<ResultIteratorBase>* out) override {
     switch (finish_return_type_) {
       case ArrowComputeResultType::BatchIterator: {
-        TIME_MICRO_OR_RAISE(p_->elapse_time_, kernel_->MakeResultIterator(schema, out));
+        std::shared_ptr<ResultIterator<HashRelation>> iter_out;
+        TIME_MICRO_OR_RAISE(p_->elapse_time_,
+                            kernel_->MakeResultIterator(schema, &iter_out));
+        *out = std::dynamic_pointer_cast<ResultIteratorBase>(iter_out);
         p_->return_type_ = ArrowComputeResultType::Batch;
       } break;
       default:
