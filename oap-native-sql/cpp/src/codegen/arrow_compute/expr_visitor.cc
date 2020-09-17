@@ -651,17 +651,15 @@ arrow::Status ExprVisitor::Finish(std::shared_ptr<ExprVisitor>* finish_visitor) 
   return arrow::Status::OK();
 }
 
-arrow::Status ExprVisitor::MakeResultIterator(
-    std::shared_ptr<arrow::Schema> schema,
-    std::shared_ptr<ResultIterator<arrow::RecordBatch>>* out) {
+arrow::Status ExprVisitor::MakeResultIterator(std::shared_ptr<arrow::Schema> schema,
+                                              std::shared_ptr<ResultIteratorBase>* out) {
   if (dependency_) {
     std::shared_ptr<ExprVisitor> dummy;
     RETURN_NOT_OK(dependency_->Finish(&dummy));
     RETURN_NOT_OK(GetResultFromDependency());
   }
   if (!finish_visitor_) {
-    RETURN_NOT_OK(impl_->MakeResultIterator(schema, &result_batch_iterator_));
-    *out = result_batch_iterator_;
+    RETURN_NOT_OK(impl_->MakeResultIterator(schema, out));
   } else {
     return arrow::Status::NotImplemented(
         "FinishVsitor MakeResultIterator is not tested, so mark as not implemented "
