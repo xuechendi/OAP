@@ -53,7 +53,6 @@ TEST(TestArrowComputeSort, SortTestNullsFirstAsc) {
   std::shared_ptr<arrow::RecordBatch> input_batch;
   std::vector<std::shared_ptr<arrow::RecordBatch>> input_batch_list;
   std::vector<std::shared_ptr<arrow::RecordBatch>> dummy_result_batches;
-  std::shared_ptr<ResultIterator<arrow::RecordBatch>> sort_result_iterator;
 
   std::vector<std::string> input_data_string = {"[10, 12, 4, 50, 52, 32, 11]",
                                                 "[11, 13, 5, 51, null, 33, 12]"};
@@ -94,7 +93,11 @@ TEST(TestArrowComputeSort, SortTestNullsFirstAsc) {
   for (auto batch : input_batch_list) {
     ASSERT_NOT_OK(sort_expr->evaluate(batch, &dummy_result_batches));
   }
-  ASSERT_NOT_OK(sort_expr->finish(&sort_result_iterator));
+  std::shared_ptr<ResultIterator<arrow::RecordBatch>> sort_result_iterator;
+  std::shared_ptr<ResultIteratorBase> sort_result_iterator_base;
+  ASSERT_NOT_OK(sort_expr->finish(&sort_result_iterator_base));
+  sort_result_iterator = std::dynamic_pointer_cast<ResultIterator<arrow::RecordBatch>>(
+      sort_result_iterator_base);
 
   std::shared_ptr<arrow::RecordBatch> dummy_result_batch;
   std::shared_ptr<arrow::RecordBatch> result_batch;
@@ -129,7 +132,6 @@ TEST(TestArrowComputeSort, SortTestNullsLastAsc) {
   std::shared_ptr<arrow::RecordBatch> input_batch;
   std::vector<std::shared_ptr<arrow::RecordBatch>> input_batch_list;
   std::vector<std::shared_ptr<arrow::RecordBatch>> dummy_result_batches;
-  std::shared_ptr<ResultIterator<arrow::RecordBatch>> sort_result_iterator;
 
   std::vector<std::string> input_data_string = {"[10, 12, 4, 50, 52, 32, 11]",
                                                 "[11, 13, 5, 51, null, 33, 12]"};
@@ -168,7 +170,11 @@ TEST(TestArrowComputeSort, SortTestNullsLastAsc) {
   for (auto batch : input_batch_list) {
     ASSERT_NOT_OK(sort_expr->evaluate(batch, &dummy_result_batches));
   }
-  ASSERT_NOT_OK(sort_expr->finish(&sort_result_iterator));
+  std::shared_ptr<ResultIterator<arrow::RecordBatch>> sort_result_iterator;
+  std::shared_ptr<ResultIteratorBase> sort_result_iterator_base;
+  ASSERT_NOT_OK(sort_expr->finish(&sort_result_iterator_base));
+  sort_result_iterator = std::dynamic_pointer_cast<ResultIterator<arrow::RecordBatch>>(
+      sort_result_iterator_base);
 
   std::shared_ptr<arrow::RecordBatch> dummy_result_batch;
   std::shared_ptr<arrow::RecordBatch> result_batch;
@@ -203,7 +209,6 @@ TEST(TestArrowComputeSort, SortTestNullsFirstDesc) {
   std::shared_ptr<arrow::RecordBatch> input_batch;
   std::vector<std::shared_ptr<arrow::RecordBatch>> input_batch_list;
   std::vector<std::shared_ptr<arrow::RecordBatch>> dummy_result_batches;
-  std::shared_ptr<ResultIterator<arrow::RecordBatch>> sort_result_iterator;
 
   std::vector<std::string> input_data_string = {"[10, 12, 4, 50, 52, 32, 11]",
                                                 "[11, 13, 5, 51, null, 33, 12]"};
@@ -242,7 +247,11 @@ TEST(TestArrowComputeSort, SortTestNullsFirstDesc) {
   for (auto batch : input_batch_list) {
     ASSERT_NOT_OK(sort_expr->evaluate(batch, &dummy_result_batches));
   }
-  ASSERT_NOT_OK(sort_expr->finish(&sort_result_iterator));
+  std::shared_ptr<ResultIterator<arrow::RecordBatch>> sort_result_iterator;
+  std::shared_ptr<ResultIteratorBase> sort_result_iterator_base;
+  ASSERT_NOT_OK(sort_expr->finish(&sort_result_iterator_base));
+  sort_result_iterator = std::dynamic_pointer_cast<ResultIterator<arrow::RecordBatch>>(
+      sort_result_iterator_base);
 
   std::shared_ptr<arrow::RecordBatch> dummy_result_batch;
   std::shared_ptr<arrow::RecordBatch> result_batch;
@@ -277,7 +286,6 @@ TEST(TestArrowComputeSort, SortTestNullsLastDesc) {
   std::shared_ptr<arrow::RecordBatch> input_batch;
   std::vector<std::shared_ptr<arrow::RecordBatch>> input_batch_list;
   std::vector<std::shared_ptr<arrow::RecordBatch>> dummy_result_batches;
-  std::shared_ptr<ResultIterator<arrow::RecordBatch>> sort_result_iterator;
 
   std::vector<std::string> input_data_string = {"[10, 12, 4, 50, 52, 32, 11]",
                                                 "[11, 13, 5, 51, null, 33, 12]"};
@@ -316,7 +324,11 @@ TEST(TestArrowComputeSort, SortTestNullsLastDesc) {
   for (auto batch : input_batch_list) {
     ASSERT_NOT_OK(sort_expr->evaluate(batch, &dummy_result_batches));
   }
-  ASSERT_NOT_OK(sort_expr->finish(&sort_result_iterator));
+  std::shared_ptr<ResultIterator<arrow::RecordBatch>> sort_result_iterator;
+  std::shared_ptr<ResultIteratorBase> sort_result_iterator_base;
+  ASSERT_NOT_OK(sort_expr->finish(&sort_result_iterator_base));
+  sort_result_iterator = std::dynamic_pointer_cast<ResultIterator<arrow::RecordBatch>>(
+      sort_result_iterator_base);
 
   std::shared_ptr<arrow::RecordBatch> dummy_result_batch;
   std::shared_ptr<arrow::RecordBatch> result_batch;
@@ -352,7 +364,6 @@ TEST(TestArrowComputeSort, SortTestNullsFirstAscMultipleKeys) {
   std::shared_ptr<arrow::RecordBatch> input_batch;
   std::vector<std::shared_ptr<arrow::RecordBatch>> input_batch_list;
   std::vector<std::shared_ptr<arrow::RecordBatch>> dummy_result_batches;
-  std::shared_ptr<ResultIterator<arrow::RecordBatch>> sort_result_iterator;
 
   std::vector<std::string> input_data_string = {"[8, 12, 4, 50, 52, 32, 11]",
                                                 R"(["a", "a", "a", "b", "b","b", "b"])",
@@ -398,7 +409,11 @@ TEST(TestArrowComputeSort, SortTestNullsFirstAscMultipleKeys) {
   for (auto batch : input_batch_list) {
     ASSERT_NOT_OK(sort_expr->evaluate(batch, &dummy_result_batches));
   }
-  ASSERT_NOT_OK(sort_expr->finish(&sort_result_iterator));
+  std::shared_ptr<ResultIterator<arrow::RecordBatch>> sort_result_iterator;
+  std::shared_ptr<ResultIteratorBase> sort_result_iterator_base;
+  ASSERT_NOT_OK(sort_expr->finish(&sort_result_iterator_base));
+  sort_result_iterator = std::dynamic_pointer_cast<ResultIterator<arrow::RecordBatch>>(
+      sort_result_iterator_base);
 
   std::shared_ptr<arrow::RecordBatch> dummy_result_batch;
   std::shared_ptr<arrow::RecordBatch> result_batch;
