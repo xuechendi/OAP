@@ -17,21 +17,16 @@
 
 #pragma once
 
-#include <cstdint>
-namespace sparkcolumnarplugin {
-namespace codegen {
-namespace arrowcompute {
-namespace extra {
-struct ArrayItemIndex {
-  uint16_t id = 0;
-  uint16_t array_id = 0;
-  bool valid = true;
-  ArrayItemIndex() : array_id(0), id(0), valid(true) {}
-  ArrayItemIndex(bool valid) : array_id(0), id(0), valid(valid) {}
-  ArrayItemIndex(uint16_t array_id, uint16_t id)
-      : array_id(array_id), id(id), valid(true) {}
+#include <arrow/status.h>
+#include <arrow/type_fwd.h>
+
+struct CodeGenContext {
+  std::vector<std::string> header_codes;
+  std::string hash_relation_prepare_codes;
+  std::string prepare_codes;
+  std::string process_codes;
+  std::string finish_codes;
+  std::string definition_codes;
+  std::vector<std::string> function_list;
+  std::vector<std::pair<std::string, std::shared_ptr<arrow::DataType>>> output_list;
 };
-}  // namespace extra
-}  // namespace arrowcompute
-}  // namespace codegen
-}  // namespace sparkcolumnarplugin

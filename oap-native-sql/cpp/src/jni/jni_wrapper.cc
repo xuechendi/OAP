@@ -278,7 +278,7 @@ Java_com_intel_oap_vectorized_ExpressionEvaluatorJniWrapper_nativeBuild(
 
 #ifdef DEBUG
   for (auto expr : expr_vector) {
-    std::cerr << expr->ToString() << std::endl;
+    std::cout << expr->ToString() << std::endl;
   }
 #endif
 

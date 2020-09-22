@@ -33,7 +33,20 @@ TYPED_BUILDER_DEFINE(UInt64Builder, uint64_t)
 TYPED_BUILDER_DEFINE(FloatBuilder, float)
 TYPED_BUILDER_DEFINE(DoubleBuilder, double)
 TYPED_BUILDER_DEFINE(Date32Builder, int32_t)
-TYPED_BUILDER_DEFINE(StringBuilder, arrow::util::string_view)
-#undef TYPED_BUILDER_DEFINE
+TYPED_BUILDER_DEFINE(Date64Builder, int64_t)
+
+class StringBuilder {
+ public:
+  StringBuilder(arrow::MemoryPool* pool);
+  arrow::Status Append(arrow::util::string_view val);
+  arrow::Status AppendString(std::string val);
+  arrow::Status AppendNull();
+  arrow::Status Finish(std::shared_ptr<arrow::Array>* out);
+  arrow::Status Reset();
+
+ private:
+  class Impl;
+  std::shared_ptr<Impl> impl_;
+};
 }  // namespace precompile
 }  // namespace sparkcolumnarplugin

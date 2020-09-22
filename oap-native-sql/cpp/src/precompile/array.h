@@ -87,6 +87,7 @@ TYPED_ARRAY_DEFINE(UInt64Array, uint64_t)
 TYPED_ARRAY_DEFINE(FloatArray, float)
 TYPED_ARRAY_DEFINE(DoubleArray, double)
 TYPED_ARRAY_DEFINE(Date32Array, int32_t)
+TYPED_ARRAY_DEFINE(Date64Array, int64_t)
 TYPED_ARRAY_DEFINE(FixedSizeBinaryArray, uint8_t)
 #undef TYPED_ARRAY_DEFINE
 
@@ -125,6 +126,14 @@ TYPED_BINARY_ARRAY_DEFINE(StringArray, std::string)
 arrow::Status MakeFixedSizeBinaryArray(const std::shared_ptr<arrow::FixedSizeBinaryType>&,
                                        int64_t, const std::shared_ptr<arrow::Buffer>&,
                                        std::shared_ptr<FixedSizeBinaryArray>*);
+
+/*template <typename T, typename Enable = void>
+struct TypeTraits {};
+
+template <typename T>
+struct TypeTraits<T, std::enable_if_t<std::is_same<T, uint32_t>::value>> {
+  using ArrayType = UInt32Array;
+};*/
 
 }  // namespace precompile
 }  // namespace sparkcolumnarplugin

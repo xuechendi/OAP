@@ -125,6 +125,7 @@ class SplitArrayListWithActionVisitorImpl : public ExprVisitorImpl {
     RETURN_NOT_OK(extra::SplitArrayListWithActionKernel::Make(
         &p_->ctx_, p_->action_name_list_, type_list, &kernel_));
     initialized_ = true;
+    finish_return_type_ = ArrowComputeResultType::Batch;
     return arrow::Status::OK();
   }
 
@@ -142,7 +143,6 @@ class SplitArrayListWithActionVisitorImpl : public ExprVisitorImpl {
           col_list.push_back(col);
         }
         TIME_MICRO_OR_RAISE(p_->elapse_time_, kernel_->Evaluate(col_list, p_->in_array_));
-        finish_return_type_ = ArrowComputeResultType::Batch;
         p_->dependency_result_type_ = ArrowComputeResultType::None;
       } break;
       default:
@@ -255,6 +255,7 @@ class AggregateVisitorImpl : public ExprVisitorImpl {
       kernel_list_.push_back(kernel_);
     }
     initialized_ = true;
+    finish_return_type_ = ArrowComputeResultType::Batch;
     return arrow::Status::OK();
   }
 
@@ -278,7 +279,6 @@ class AggregateVisitorImpl : public ExprVisitorImpl {
             RETURN_NOT_OK(kernel_list_[i]->Evaluate(in));
           }
         }
-        finish_return_type_ = ArrowComputeResultType::Batch;
       } break;
       default:
         return arrow::Status::NotImplemented(
@@ -551,6 +551,7 @@ class SortArraysToIndicesVisitorImpl : public ExprVisitorImpl {
         &p_->ctx_, field_list, p_->schema_, &kernel_, nulls_first_, asc_));
     p_->signature_ = kernel_->GetSignature();
     initialized_ = true;
+    finish_return_type_ = ArrowComputeResultType::BatchIterator;
     return arrow::Status::OK();
   }
 
@@ -562,7 +563,6 @@ class SortArraysToIndicesVisitorImpl : public ExprVisitorImpl {
           col_list.push_back(col);
         }
         RETURN_NOT_OK(kernel_->Evaluate(col_list));
-        finish_return_type_ = ArrowComputeResultType::BatchIterator;
       } break;
       default:
         return arrow::Status::NotImplemented(
@@ -635,6 +635,7 @@ class ConditionedProbeArraysVisitorImpl : public ExprVisitorImpl {
         left_field_list_, right_field_list_, arrow::schema(ret_fields_), &kernel_));
     p_->signature_ = kernel_->GetSignature();
     initialized_ = true;
+    finish_return_type_ = ArrowComputeResultType::BatchIterator;
     return arrow::Status::OK();
   }
 
@@ -646,7 +647,6 @@ class ConditionedProbeArraysVisitorImpl : public ExprVisitorImpl {
           in.push_back(p_->in_record_batch_->column(i));
         }
         TIME_MICRO_OR_RAISE(p_->elapse_time_, kernel_->Evaluate(in));
-        finish_return_type_ = ArrowComputeResultType::BatchIterator;
       } break;
       default:
         return arrow::Status::NotImplemented(
@@ -726,6 +726,7 @@ class ConditionedJoinArraysVisitorImpl : public ExprVisitorImpl {
         left_field_list_, right_field_list_, arrow::schema(ret_fields_), &kernel_));
     p_->signature_ = kernel_->GetSignature();
     initialized_ = true;
+    finish_return_type_ = ArrowComputeResultType::BatchIterator;
     return arrow::Status::OK();
   }
 
@@ -737,7 +738,6 @@ class ConditionedJoinArraysVisitorImpl : public ExprVisitorImpl {
           in.push_back(p_->in_record_batch_->column(i));
         }
         TIME_MICRO_OR_RAISE(p_->elapse_time_, kernel_->Evaluate(in));
-        finish_return_type_ = ArrowComputeResultType::BatchIterator;
       } break;
       default:
         return arrow::Status::NotImplemented(
@@ -804,6 +804,7 @@ class HashAggregateArraysVisitorImpl : public ExprVisitorImpl {
     RETURN_NOT_OK(extra::HashAggregateKernel::Make(&p_->ctx_, field_list_, action_list_,
                                                    arrow::schema(ret_fields_), &kernel_));
     p_->signature_ = kernel_->GetSignature();
+    finish_return_type_ = ArrowComputeResultType::BatchIterator;
     initialized_ = true;
     return arrow::Status::OK();
   }
@@ -816,7 +817,6 @@ class HashAggregateArraysVisitorImpl : public ExprVisitorImpl {
           in.push_back(p_->in_record_batch_->column(i));
         }
         TIME_MICRO_OR_RAISE(p_->elapse_time_, kernel_->Evaluate(in));
-        finish_return_type_ = ArrowComputeResultType::BatchIterator;
       } break;
       default:
         return arrow::Status::NotImplemented(
@@ -830,7 +830,7 @@ class HashAggregateArraysVisitorImpl : public ExprVisitorImpl {
                                    std::shared_ptr<ResultIteratorBase>* out) override {
     switch (finish_return_type_) {
       case ArrowComputeResultType::BatchIterator: {
-        std::shared_ptr<ResultIterator<HashRelation>> iter_out;
+        std::shared_ptr<ResultIterator<arrow::RecordBatch>> iter_out;
         TIME_MICRO_OR_RAISE(p_->elapse_time_,
                             kernel_->MakeResultIterator(schema, &iter_out));
         *out = std::dynamic_pointer_cast<ResultIteratorBase>(iter_out);
@@ -846,6 +846,139 @@ class HashAggregateArraysVisitorImpl : public ExprVisitorImpl {
 
  private:
   std::vector<std::shared_ptr<gandiva::Node>> action_list_;
+  std::vector<std::shared_ptr<arrow::Field>> field_list_;
+  std::vector<std::shared_ptr<arrow::Field>> ret_fields_;
+};
+
+////////////////////////// WholeStageCodeGenVisitorImpl ///////////////////////
+class WholeStageCodeGenVisitorImpl : public ExprVisitorImpl {
+ public:
+  WholeStageCodeGenVisitorImpl(std::vector<std::shared_ptr<arrow::Field>> field_list,
+                               std::shared_ptr<gandiva::Node> root_node,
+                               std::vector<std::shared_ptr<arrow::Field>> ret_fields,
+                               ExprVisitor* p)
+      : root_node_(root_node),
+        field_list_(field_list),
+        ret_fields_(ret_fields),
+        ExprVisitorImpl(p) {
+    finish_return_type_ = ArrowComputeResultType::BatchIterator;
+  }
+  static arrow::Status Make(std::vector<std::shared_ptr<arrow::Field>> field_list,
+                            std::shared_ptr<gandiva::Node> root_node,
+                            std::vector<std::shared_ptr<arrow::Field>> ret_fields,
+                            ExprVisitor* p, std::shared_ptr<ExprVisitorImpl>* out) {
+    auto impl = std::make_shared<WholeStageCodeGenVisitorImpl>(field_list, root_node,
+                                                               ret_fields, p);
+    *out = impl;
+    return arrow::Status::OK();
+  }
+
+  arrow::Status Init() override {
+    if (initialized_) {
+      return arrow::Status::OK();
+    }
+    RETURN_NOT_OK(extra::WholeStageCodeGenKernel::Make(&p_->ctx_, field_list_, root_node_,
+                                                       ret_fields_, &kernel_));
+    p_->signature_ = kernel_->GetSignature();
+    initialized_ = true;
+    return arrow::Status::OK();
+  }
+
+  arrow::Status MakeResultIterator(std::shared_ptr<arrow::Schema> schema,
+                                   std::shared_ptr<ResultIteratorBase>* out) override {
+    switch (finish_return_type_) {
+      case ArrowComputeResultType::BatchIterator: {
+        std::shared_ptr<ResultIterator<arrow::RecordBatch>> iter_out;
+        TIME_MICRO_OR_RAISE(p_->elapse_time_,
+                            kernel_->MakeResultIterator(schema, &iter_out));
+        *out = std::dynamic_pointer_cast<ResultIteratorBase>(iter_out);
+        p_->return_type_ = ArrowComputeResultType::Batch;
+      } break;
+      default:
+        return arrow::Status::Invalid(
+            "WholeStageCodeGenVisitorImpl MakeResultIterator does not support "
+            "dependency type other than Batch.");
+    }
+    return arrow::Status::OK();
+  }
+
+ private:
+  std::shared_ptr<gandiva::Node> root_node_;
+  std::vector<std::shared_ptr<arrow::Field>> field_list_;
+  std::vector<std::shared_ptr<arrow::Field>> ret_fields_;
+};
+
+////////////////////////// HashRelationVisitorImpl ///////////////////////
+class HashRelationVisitorImpl : public ExprVisitorImpl {
+ public:
+  HashRelationVisitorImpl(std::vector<std::shared_ptr<arrow::Field>> field_list,
+                          std::shared_ptr<gandiva::Node> root_node,
+                          std::vector<std::shared_ptr<arrow::Field>> ret_fields,
+                          ExprVisitor* p)
+      : root_node_(root_node),
+        field_list_(field_list),
+        ret_fields_(ret_fields),
+        ExprVisitorImpl(p) {
+    finish_return_type_ = ArrowComputeResultType::BatchIterator;
+  }
+  static arrow::Status Make(std::vector<std::shared_ptr<arrow::Field>> field_list,
+                            std::shared_ptr<gandiva::Node> root_node,
+                            std::vector<std::shared_ptr<arrow::Field>> ret_fields,
+                            ExprVisitor* p, std::shared_ptr<ExprVisitorImpl>* out) {
+    auto impl =
+        std::make_shared<HashRelationVisitorImpl>(field_list, root_node, ret_fields, p);
+    *out = impl;
+    return arrow::Status::OK();
+  }
+
+  arrow::Status Init() override {
+    if (initialized_) {
+      return arrow::Status::OK();
+    }
+    RETURN_NOT_OK(extra::HashRelationKernel::Make(&p_->ctx_, field_list_, root_node_,
+                                                  ret_fields_, &kernel_));
+    p_->signature_ = kernel_->GetSignature();
+    initialized_ = true;
+    finish_return_type_ = ArrowComputeResultType::BatchIterator;
+    return arrow::Status::OK();
+  }
+
+  arrow::Status Eval() override {
+    switch (p_->dependency_result_type_) {
+      case ArrowComputeResultType::None: {
+        ArrayList in;
+        for (int i = 0; i < p_->in_record_batch_->num_columns(); i++) {
+          in.push_back(p_->in_record_batch_->column(i));
+        }
+        TIME_MICRO_OR_RAISE(p_->elapse_time_, kernel_->Evaluate(in));
+      } break;
+      default:
+        return arrow::Status::NotImplemented(
+            "HashRelationVisitorImpl: Does not support this type of "
+            "input.");
+    }
+    return arrow::Status::OK();
+  }
+  arrow::Status MakeResultIterator(std::shared_ptr<arrow::Schema> schema,
+                                   std::shared_ptr<ResultIteratorBase>* out) override {
+    switch (finish_return_type_) {
+      case ArrowComputeResultType::BatchIterator: {
+        std::shared_ptr<ResultIterator<HashRelation>> iter_out;
+        TIME_MICRO_OR_RAISE(p_->elapse_time_,
+                            kernel_->MakeResultIterator(schema, &iter_out));
+        *out = std::dynamic_pointer_cast<ResultIteratorBase>(iter_out);
+        p_->return_type_ = ArrowComputeResultType::Batch;
+      } break;
+      default:
+        return arrow::Status::Invalid(
+            "WholeStageCodeGenVisitorImpl MakeResultIterator does not support "
+            "dependency type other than Batch.");
+    }
+    return arrow::Status::OK();
+  }
+
+ private:
+  std::shared_ptr<gandiva::Node> root_node_;
   std::vector<std::shared_ptr<arrow::Field>> field_list_;
   std::vector<std::shared_ptr<arrow::Field>> ret_fields_;
 };
