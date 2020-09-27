@@ -43,7 +43,7 @@ class TypedHashRelation<DataType, enable_if_string_like<DataType>> : public Hash
     auto typed_array = std::make_shared<ArrayType>(in);
     if (typed_array->null_count() == 0) {
       for (int i = 0; i < typed_array->length(); i++) {
-        RETURN_NOT_OK(Insert(typed_array->GetString(i), num_arrays_, i));
+        RETURN_NOT_OK(Insert(typed_array->GetView(i), num_arrays_, i));
       }
     } else {
       for (int i = 0; i < typed_array->length(); i++) {
@@ -51,7 +51,7 @@ class TypedHashRelation<DataType, enable_if_string_like<DataType>> : public Hash
           RETURN_NOT_OK(InsertNull(num_arrays_, i));
 
         } else {
-          RETURN_NOT_OK(Insert(typed_array->GetString(i), num_arrays_, i));
+          RETURN_NOT_OK(Insert(typed_array->GetView(i), num_arrays_, i));
         }
       }
     }
@@ -61,10 +61,12 @@ class TypedHashRelation<DataType, enable_if_string_like<DataType>> : public Hash
 
   int Get(T v) { return hash_table_->Get(arrow::util::string_view(v)); }
 
+  int Get(arrow::util::string_view v) { return hash_table_->Get(v); }
+
   int GetNull() { return hash_table_->GetNull(); }
 
  private:
-  arrow::Status Insert(T v, uint32_t array_id, uint32_t id) {
+  arrow::Status Insert(arrow::util::string_view v, uint32_t array_id, uint32_t id) {
     int i;
     RETURN_NOT_OK(hash_table_->GetOrInsert(
         v, [](int32_t i) {}, [](int32_t i) {}, &i));

@@ -36,6 +36,10 @@ class HashRelationColumn {
   virtual arrow::Status AppendColumn(std::shared_ptr<arrow::Array> in) {
     return arrow::Status::NotImplemented("HashRelationColumn AppendColumn is abstract.");
   };
+  virtual arrow::Status GetArrayVector(std::vector<std::shared_ptr<arrow::Array>>* out) {
+    return arrow::Status::NotImplemented(
+        "HashRelationColumn GetArrayVector is abstract.");
+  }
 };
 
 template <typename T, typename Enable = void>
@@ -53,6 +57,12 @@ class TypedHashRelationColumn<DataType, enable_if_number<DataType>>
   arrow::Status AppendColumn(std::shared_ptr<arrow::Array> in) override {
     auto typed_in = std::make_shared<ArrayType>(in);
     array_vector_.push_back(typed_in);
+    return arrow::Status::OK();
+  }
+  arrow::Status GetArrayVector(std::vector<std::shared_ptr<arrow::Array>>* out) override {
+    for (auto arr : array_vector_) {
+      (*out).push_back(arr->cache_);
+    }
     return arrow::Status::OK();
   }
   T GetValue(int array_id, int id) { return array_vector_[array_id]->GetView(id); }
@@ -73,6 +83,12 @@ class TypedHashRelationColumn<DataType, enable_if_string_like<DataType>>
   arrow::Status AppendColumn(std::shared_ptr<arrow::Array> in) override {
     auto typed_in = std::make_shared<StringArray>(in);
     array_vector_.push_back(typed_in);
+    return arrow::Status::OK();
+  }
+  arrow::Status GetArrayVector(std::vector<std::shared_ptr<arrow::Array>>* out) override {
+    for (auto arr : array_vector_) {
+      (*out).push_back(arr->cache_);
+    }
     return arrow::Status::OK();
   }
   std::string GetValue(int array_id, int id) {
@@ -98,6 +114,10 @@ class HashRelation {
 
   arrow::Status AppendPayloadColumn(int idx, std::shared_ptr<arrow::Array> in) {
     return hash_relation_column_list_[idx]->AppendColumn(in);
+  }
+
+  arrow::Status GetArrayVector(int idx, std::vector<std::shared_ptr<arrow::Array>>* out) {
+    return hash_relation_column_list_[idx]->GetArrayVector(out);
   }
 
   template <typename T>

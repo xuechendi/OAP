@@ -18,6 +18,7 @@
 #include <arrow/array.h>
 #include <arrow/compute/context.h>
 #include <arrow/pretty_print.h>
+#include <arrow/record_batch.h>
 #include <arrow/status.h>
 #include <arrow/type.h>
 #include <arrow/type_traits.h>
@@ -28,14 +29,17 @@
 #include <chrono>
 #include <cstring>
 #include <fstream>
+#include <functional>
 #include <iostream>
 #include <unordered_map>
 
+#include "codegen/arrow_compute/ext/array_appender.h"
 #include "codegen/arrow_compute/ext/codegen_common.h"
 #include "codegen/arrow_compute/ext/expression_codegen_visitor.h"
 #include "codegen/arrow_compute/ext/kernels_ext.h"
 #include "codegen/arrow_compute/ext/typed_node_visitor.h"
-#include "codegen/common/hash_relation.h"
+#include "codegen/common/hash_relation_number.h"
+#include "codegen/common/hash_relation_string.h"
 #include "utils/macros.h"
 
 namespace sparkcolumnarplugin {
@@ -88,8 +92,8 @@ class ConditionedProbeKernel::Impl {
       }
     }
     if (pre_processed_key_) {
-      auto project_expr = GetConcatedKernel(right_key_node_list);
-      right_key_project_ = project_expr->root();
+      right_key_project_expr_ = GetConcatedKernel(right_key_node_list);
+      right_key_project_ = right_key_project_expr_->root();
     }
 
     /////////// map result_schema to input schema /////////////
@@ -109,6 +113,25 @@ class ConditionedProbeKernel::Impl {
   arrow::Status MakeResultIterator(
       std::shared_ptr<arrow::Schema> schema,
       std::shared_ptr<ResultIterator<arrow::RecordBatch>>* out) {
+    if (condition_) {
+      return arrow::Status::NotImplemented(
+          "ConditionedProbeKernel(Non-Codegen) doesn't support condition.");
+    }
+    std::shared_ptr<gandiva::Projector> right_key_projector;
+    std::shared_ptr<arrow::DataType> key_type;
+    if (right_key_project_) {
+      auto schema = arrow::schema(right_field_list_);
+      auto configuration = gandiva::ConfigurationBuilder().DefaultConfiguration();
+      THROW_NOT_OK(gandiva::Projector::Make(schema, {right_key_project_expr_},
+                                            configuration, &right_key_projector));
+      key_type = right_key_project_->return_type();
+    } else {
+      key_type = right_field_list_[right_key_index_list_[0]]->type();
+    }
+    *out = std::make_shared<ConditionedProbeResultIterator>(
+        ctx_, right_key_index_list_, key_type, join_type_, right_key_projector,
+        result_schema_, result_schema_index_list_, exist_index_, left_field_list_,
+        right_field_list_);
     return arrow::Status::OK();
   }
 
@@ -258,6 +281,7 @@ class ConditionedProbeKernel::Impl {
   arrow::MemoryPool* pool_;
   std::string signature_;
   int join_type_;
+  gandiva::ExpressionPtr right_key_project_expr_;
   gandiva::NodePtr condition_;
   gandiva::NodePtr right_key_project_;
 
@@ -271,6 +295,414 @@ class ConditionedProbeKernel::Impl {
   std::vector<std::pair<int, int>> result_schema_index_list_;
   int exist_index_ = -1;
   int hash_relation_id_;
+  std::vector<arrow::ArrayVector> cached_;
+
+  class ConditionedProbeResultIterator : public ResultIterator<arrow::RecordBatch> {
+   public:
+    ConditionedProbeResultIterator(
+        arrow::compute::FunctionContext* ctx, std::vector<int> right_key_index_list,
+        std::shared_ptr<arrow::DataType> key_type, int join_type,
+        std::shared_ptr<gandiva::Projector> right_key_project,
+        gandiva::FieldVector result_schema,
+        std::vector<std::pair<int, int>> result_schema_index_list, int exist_index,
+        gandiva::FieldVector left_field_list, gandiva::FieldVector right_field_list)
+        : ctx_(ctx),
+          right_key_index_list_(right_key_index_list),
+          key_type_(key_type),
+          join_type_(join_type),
+          right_key_project_(right_key_project),
+          result_schema_index_list_(result_schema_index_list),
+          exist_index_(exist_index),
+          left_field_list_(left_field_list),
+          right_field_list_(right_field_list) {
+      result_schema_ = arrow::schema(result_schema);
+    }
+
+#define PROCESS_SUPPORTED_TYPES(PROCESS) \
+  PROCESS(arrow::UInt8Type)              \
+  PROCESS(arrow::Int8Type)               \
+  PROCESS(arrow::UInt16Type)             \
+  PROCESS(arrow::Int16Type)              \
+  PROCESS(arrow::UInt32Type)             \
+  PROCESS(arrow::Int32Type)              \
+  PROCESS(arrow::UInt64Type)             \
+  PROCESS(arrow::Int64Type)              \
+  PROCESS(arrow::FloatType)              \
+  PROCESS(arrow::DoubleType)             \
+  PROCESS(arrow::Date32Type)             \
+  PROCESS(arrow::Date64Type)             \
+  PROCESS(arrow::StringType)
+    arrow::Status SetDependencies(
+        const std::vector<std::shared_ptr<ResultIteratorBase>>& dependent_iter_list) {
+      auto iter = dependent_iter_list[0];
+      auto typed_dependent =
+          std::dynamic_pointer_cast<ResultIterator<HashRelation>>(iter);
+      RETURN_NOT_OK(typed_dependent->Next(&hash_relation_));
+
+      // chendi: previous result_schema_index_list design is little tricky, it put
+      // existentce col at the back of all col while exists_index_ may be at middle out
+      // real result. Add two index here.
+      auto result_schema_length =
+          (exist_index_ == -1 || exist_index_ == right_field_list_.size())
+              ? result_schema_index_list_.size()
+              : (result_schema_index_list_.size() - 1);
+      int result_idx = 0;
+      for (int i = 0; i < result_schema_length; i++) {
+        auto pair = result_schema_index_list_[i];
+        std::shared_ptr<arrow::DataType> type;
+        AppenderBase::AppenderType appender_type;
+        if (result_idx++ == exist_index_) {
+          appender_type = AppenderBase::exist;
+          type = arrow::boolean();
+          if (result_idx < result_schema_index_list_.size()) i -= 1;
+        } else {
+          appender_type = pair.first == 0 ? AppenderBase::left : AppenderBase::right;
+          if (pair.first == 0) {
+            type = left_field_list_[pair.second]->type();
+          } else {
+            type = right_field_list_[pair.second]->type();
+          }
+        }
+
+        std::shared_ptr<AppenderBase> appender;
+        RETURN_NOT_OK(MakeAppender(ctx_, type, appender_type, &appender));
+        // insert all left arrays
+        if (pair.first == 0) {
+          arrow::ArrayVector cached;
+          RETURN_NOT_OK(hash_relation_->GetArrayVector(pair.second, &cached));
+          for (auto arr : cached) {
+            appender->AddArray(arr);
+          }
+        }
+        appender_list_.push_back(appender);
+      }
+
+      // prepare probe function
+      switch (key_type_->id()) {
+#define PROCESS(InType)                                                                  \
+  case InType::type_id: {                                                                \
+    switch (join_type_) {                                                                \
+      case 0: { /*Inner Join*/                                                           \
+        auto func = std::make_shared<InnerProbeFunction<InType>>(hash_relation_,         \
+                                                                 appender_list_);        \
+        probe_func_ = std::dynamic_pointer_cast<ProbeFunctionBase>(func);                \
+      } break;                                                                           \
+      case 1: { /*Outer Join*/                                                           \
+        auto func = std::make_shared<OuterProbeFunction<InType>>(hash_relation_,         \
+                                                                 appender_list_);        \
+        probe_func_ = std::dynamic_pointer_cast<ProbeFunctionBase>(func);                \
+      } break;                                                                           \
+      case 2: { /*Anti Join*/                                                            \
+        auto func =                                                                      \
+            std::make_shared<AntiProbeFunction<InType>>(hash_relation_, appender_list_); \
+        probe_func_ = std::dynamic_pointer_cast<ProbeFunctionBase>(func);                \
+      } break;                                                                           \
+      case 3: { /*Semi Join*/                                                            \
+        auto func =                                                                      \
+            std::make_shared<SemiProbeFunction<InType>>(hash_relation_, appender_list_); \
+        probe_func_ = std::dynamic_pointer_cast<ProbeFunctionBase>(func);                \
+      } break;                                                                           \
+      case 4: { /*Existence Join*/                                                       \
+        auto func = std::make_shared<ExistenceProbeFunction<InType>>(hash_relation_,     \
+                                                                     appender_list_);    \
+        probe_func_ = std::dynamic_pointer_cast<ProbeFunctionBase>(func);                \
+      } break;                                                                           \
+      default:                                                                           \
+        return arrow::Status::NotImplemented(                                            \
+            "ConditionedProbeArraysTypedImpl only support join type: InnerJoin, "        \
+            "RightJoin");                                                                \
+    }                                                                                    \
+  } break;
+        PROCESS_SUPPORTED_TYPES(PROCESS)
+#undef PROCESS
+        default: {
+          std::cout << "ConditionedProbeArraysTypedImpl does not support key type as "
+                    << key_type_ << std::endl;
+        } break;
+      }
+      return arrow::Status::OK();
+    }
+#undef PROCESS_SUPPORTED_TYPES
+
+    arrow::Status Process(
+        const std::vector<std::shared_ptr<arrow::Array>>& in,
+        std::shared_ptr<arrow::RecordBatch>* out,
+        const std::shared_ptr<arrow::Array>& selection = nullptr) override {
+      // Get key array, which should be typed
+      std::shared_ptr<arrow::Array> key_array;
+      if (right_key_project_) {
+        arrow::ArrayVector outputs;
+        auto length = in.size() > 0 ? in[0]->length() : 0;
+        auto in_batch =
+            arrow::RecordBatch::Make(arrow::schema(right_field_list_), length, in);
+        RETURN_NOT_OK(
+            right_key_project_->Evaluate(*in_batch, ctx_->memory_pool(), &outputs));
+        key_array = outputs[0];
+      } else {
+        key_array = in[right_key_index_list_[0]];
+      }
+      // put in to ArrayAppender then doing evaluate
+      for (int tmp_idx = 0; tmp_idx < appender_list_.size(); tmp_idx++) {
+        auto appender = appender_list_[tmp_idx];
+        if (appender->GetType() == AppenderBase::right) {
+          auto idx_exclude_exist =
+              (exist_index_ == -1 || tmp_idx < exist_index_) ? tmp_idx : (tmp_idx - 1);
+          auto right_in_idx = result_schema_index_list_[idx_exclude_exist].second;
+          RETURN_NOT_OK(appender->AddArray(in[right_in_idx]));
+        }
+      }
+      auto out_length = probe_func_->Evaluate(key_array);
+      arrow::ArrayVector out_arr_list;
+      for (auto appender : appender_list_) {
+        std::shared_ptr<arrow::Array> out_arr;
+        RETURN_NOT_OK(appender->Finish(&out_arr));
+        out_arr_list.push_back(out_arr);
+        if (appender->GetType() == AppenderBase::right) {
+          RETURN_NOT_OK(appender->PopArray());
+        }
+        RETURN_NOT_OK(appender->Reset());
+      }
+      *out = arrow::RecordBatch::Make(result_schema_, out_length, out_arr_list);
+      return arrow::Status::OK();
+    }
+
+   private:
+    class ProbeFunctionBase {
+     public:
+      virtual uint64_t Evaluate(std::shared_ptr<arrow::Array>) { return 0; }
+    };
+
+    template <typename DataType>
+    class InnerProbeFunction : public ProbeFunctionBase {
+     public:
+      InnerProbeFunction(std::shared_ptr<HashRelation> hash_relation,
+                         std::vector<std::shared_ptr<AppenderBase>> appender_list)
+          : appender_list_(appender_list) {
+        typed_hash_relation_ =
+            std::dynamic_pointer_cast<TypedHashRelation<DataType>>(hash_relation);
+      }
+      uint64_t Evaluate(std::shared_ptr<arrow::Array> key_array) override {
+        auto typed_key_array = std::dynamic_pointer_cast<ArrayType>(key_array);
+
+        uint64_t out_length = 0;
+        for (int i = 0; i < key_array->length(); i++) {
+          int index;
+          if (key_array->IsNull(i)) {
+            index = typed_hash_relation_->GetNull();
+          } else {
+            index = typed_hash_relation_->Get(typed_key_array->GetView(i));
+          }
+          if (index == -1) {
+            continue;
+          }
+          for (auto tmp : typed_hash_relation_->GetItemListByIndex(index)) {
+            for (auto appender : appender_list_) {
+              if (appender->GetType() == AppenderBase::left) {
+                THROW_NOT_OK(appender->Append(tmp.array_id, tmp.id));
+              } else {
+                THROW_NOT_OK(appender->Append(0, i));
+              }
+            }
+            out_length += 1;
+          }
+        }
+        return out_length;
+      }
+
+     private:
+      using ArrayType = typename arrow::TypeTraits<DataType>::ArrayType;
+      std::shared_ptr<TypedHashRelation<DataType>> typed_hash_relation_;
+      std::vector<std::shared_ptr<AppenderBase>> appender_list_;
+    };
+
+    template <typename DataType>
+    class OuterProbeFunction : public ProbeFunctionBase {
+     public:
+      OuterProbeFunction(std::shared_ptr<HashRelation> hash_relation,
+                         std::vector<std::shared_ptr<AppenderBase>> appender_list)
+          : appender_list_(appender_list) {
+        typed_hash_relation_ =
+            std::dynamic_pointer_cast<TypedHashRelation<DataType>>(hash_relation);
+      }
+      uint64_t Evaluate(std::shared_ptr<arrow::Array> key_array) override {
+        auto typed_key_array = std::dynamic_pointer_cast<ArrayType>(key_array);
+        uint64_t out_length = 0;
+        for (int i = 0; i < key_array->length(); i++) {
+          int index;
+          if (key_array->IsNull(i)) {
+            index = typed_hash_relation_->GetNull();
+          } else {
+            index = typed_hash_relation_->Get(typed_key_array->GetView(i));
+          }
+          if (index == -1) {
+            for (auto appender : appender_list_) {
+              if (appender->GetType() == AppenderBase::left) {
+                THROW_NOT_OK(appender->AppendNull());
+              } else {
+                THROW_NOT_OK(appender->Append(0, i));
+              }
+            }
+            out_length += 1;
+            continue;
+          }
+          for (auto tmp : typed_hash_relation_->GetItemListByIndex(index)) {
+            for (auto appender : appender_list_) {
+              if (appender->GetType() == AppenderBase::left) {
+                THROW_NOT_OK(appender->Append(tmp.array_id, tmp.id));
+              } else {
+                THROW_NOT_OK(appender->Append(0, i));
+              }
+            }
+            out_length += 1;
+          }
+        }
+        return out_length;
+      }
+
+     private:
+      using ArrayType = typename arrow::TypeTraits<DataType>::ArrayType;
+      std::shared_ptr<TypedHashRelation<DataType>> typed_hash_relation_;
+      std::vector<std::shared_ptr<AppenderBase>> appender_list_;
+    };
+
+    template <typename DataType>
+    class AntiProbeFunction : public ProbeFunctionBase {
+     public:
+      AntiProbeFunction(std::shared_ptr<HashRelation> hash_relation,
+                        std::vector<std::shared_ptr<AppenderBase>> appender_list)
+          : appender_list_(appender_list) {
+        typed_hash_relation_ =
+            std::dynamic_pointer_cast<TypedHashRelation<DataType>>(hash_relation);
+      }
+      uint64_t Evaluate(std::shared_ptr<arrow::Array> key_array) override {
+        auto typed_key_array = std::dynamic_pointer_cast<ArrayType>(key_array);
+        uint64_t out_length = 0;
+        for (int i = 0; i < key_array->length(); i++) {
+          int index;
+          if (key_array->IsNull(i)) {
+            index = typed_hash_relation_->GetNull();
+          } else {
+            index = typed_hash_relation_->Get(typed_key_array->GetView(i));
+          }
+          if (index == -1) {
+            for (auto appender : appender_list_) {
+              if (appender->GetType() == AppenderBase::left) {
+                THROW_NOT_OK(appender->AppendNull());
+              } else {
+                THROW_NOT_OK(appender->Append(0, i));
+              }
+            }
+            out_length += 1;
+          }
+        }
+        return out_length;
+      }
+
+     private:
+      using ArrayType = typename arrow::TypeTraits<DataType>::ArrayType;
+      std::shared_ptr<TypedHashRelation<DataType>> typed_hash_relation_;
+      std::vector<std::shared_ptr<AppenderBase>> appender_list_;
+    };
+
+    template <typename DataType>
+    class SemiProbeFunction : public ProbeFunctionBase {
+     public:
+      SemiProbeFunction(std::shared_ptr<HashRelation> hash_relation,
+                        std::vector<std::shared_ptr<AppenderBase>> appender_list)
+          : appender_list_(appender_list) {
+        typed_hash_relation_ =
+            std::dynamic_pointer_cast<TypedHashRelation<DataType>>(hash_relation);
+      }
+      uint64_t Evaluate(std::shared_ptr<arrow::Array> key_array) override {
+        auto typed_key_array = std::dynamic_pointer_cast<ArrayType>(key_array);
+        uint64_t out_length = 0;
+        for (int i = 0; i < key_array->length(); i++) {
+          int index;
+          if (key_array->IsNull(i)) {
+            index = typed_hash_relation_->GetNull();
+          } else {
+            index = typed_hash_relation_->Get(typed_key_array->GetView(i));
+          }
+          if (index == -1) {
+            continue;
+          }
+          for (auto appender : appender_list_) {
+            if (appender->GetType() == AppenderBase::left) {
+              THROW_NOT_OK(appender->AppendNull());
+            } else {
+              THROW_NOT_OK(appender->Append(0, i));
+            }
+          }
+          out_length += 1;
+        }
+        return out_length;
+      }
+
+     private:
+      using ArrayType = typename arrow::TypeTraits<DataType>::ArrayType;
+      std::shared_ptr<TypedHashRelation<DataType>> typed_hash_relation_;
+      std::vector<std::shared_ptr<AppenderBase>> appender_list_;
+    };
+
+    template <typename DataType>
+    class ExistenceProbeFunction : public ProbeFunctionBase {
+     public:
+      ExistenceProbeFunction(std::shared_ptr<HashRelation> hash_relation,
+                             std::vector<std::shared_ptr<AppenderBase>> appender_list)
+          : appender_list_(appender_list) {
+        typed_hash_relation_ =
+            std::dynamic_pointer_cast<TypedHashRelation<DataType>>(hash_relation);
+      }
+      uint64_t Evaluate(std::shared_ptr<arrow::Array> key_array) override {
+        auto typed_key_array = std::dynamic_pointer_cast<ArrayType>(key_array);
+        uint64_t out_length = 0;
+        for (int i = 0; i < key_array->length(); i++) {
+          int index;
+          if (key_array->IsNull(i)) {
+            index = typed_hash_relation_->GetNull();
+          } else {
+            index = typed_hash_relation_->Get(typed_key_array->GetView(i));
+          }
+          bool exists = true;
+          if (index == -1) {
+            exists = false;
+          }
+          for (auto appender : appender_list_) {
+            if (appender->GetType() == AppenderBase::exist) {
+              THROW_NOT_OK(appender->AppendExistence(exists));
+            } else if (appender->GetType() == AppenderBase::right) {
+              THROW_NOT_OK(appender->Append(0, i));
+            } else {
+              THROW_NOT_OK(appender->AppendNull());
+            }
+          }
+          out_length += 1;
+        }
+        return out_length;
+      }
+
+     private:
+      using ArrayType = typename arrow::TypeTraits<DataType>::ArrayType;
+      std::shared_ptr<TypedHashRelation<DataType>> typed_hash_relation_;
+      std::vector<std::shared_ptr<AppenderBase>> appender_list_;
+    };
+
+    arrow::compute::FunctionContext* ctx_;
+    int join_type_;
+    std::vector<int> right_key_index_list_;
+    std::shared_ptr<gandiva::Projector> right_key_project_;
+    std::shared_ptr<arrow::DataType> key_type_;
+    std::shared_ptr<HashRelation> hash_relation_;
+
+    std::shared_ptr<arrow::Schema> result_schema_;
+    std::vector<std::pair<int, int>> result_schema_index_list_;
+    int exist_index_;
+    std::vector<std::shared_ptr<AppenderBase>> appender_list_;
+
+    gandiva::FieldVector left_field_list_;
+    gandiva::FieldVector right_field_list_;
+    std::shared_ptr<ProbeFunctionBase> probe_func_;
+  };
 
   arrow::Status GetInnerJoin(const std::vector<std::string> input, bool cond_check,
                              std::string set_value, std::string index_name,

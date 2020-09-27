@@ -19,8 +19,9 @@ class Array {
   int64_t null_count() const { return null_count_; }
   const uint8_t* value_data() const { return raw_value_; }
 
- private:
   std::shared_ptr<arrow::Array> cache_;
+
+ private:
   const uint8_t* raw_value_;
   const uint8_t* null_bitmap_data_;
   uint64_t offset_;
@@ -44,8 +45,9 @@ class BooleanArray {
   int64_t length() const { return length_; }
   int64_t null_count() const { return null_count_; }
 
- private:
   std::shared_ptr<arrow::Array> cache_;
+
+ private:
   const uint8_t* raw_value_;
   const uint8_t* null_bitmap_data_;
   uint64_t offset_;
@@ -67,8 +69,9 @@ class BooleanArray {
     int64_t null_count() const { return null_count_; }         \
     const TYPE* value_data() const { return raw_value_; }      \
                                                                \
-   private:                                                    \
     std::shared_ptr<arrow::Array> cache_;                      \
+                                                               \
+   private:                                                    \
     const TYPE* raw_value_;                                    \
     const uint8_t* null_bitmap_data_;                          \
     uint64_t offset_;                                          \
@@ -110,9 +113,10 @@ TYPED_ARRAY_DEFINE(FixedSizeBinaryArray, uint8_t)
     int64_t length() const { return length_; }                                         \
     int64_t null_count() const { return null_count_; }                                 \
                                                                                        \
+    std::shared_ptr<arrow::Array> cache_;                                              \
+                                                                                       \
    private:                                                                            \
     using offset_type = int32_t;                                                       \
-    std::shared_ptr<arrow::Array> cache_;                                              \
     const uint8_t* raw_value_;                                                         \
     const int32_t* raw_value_offsets_;                                                 \
     const uint8_t* null_bitmap_data_;                                                  \

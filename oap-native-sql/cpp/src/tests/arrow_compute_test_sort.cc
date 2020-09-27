@@ -47,8 +47,7 @@ TEST(TestArrowComputeSort, SortTestNullsFirstAsc) {
   std::vector<std::shared_ptr<Field>> ret_types = {f0, f1};
   ///////////////////// Calculation //////////////////
   std::shared_ptr<CodeGenerator> sort_expr;
-  ASSERT_NOT_OK(
-      CreateCodeGenerator(sch, {sortArrays_expr}, ret_types, &sort_expr, true));
+  ASSERT_NOT_OK(CreateCodeGenerator(sch, {sortArrays_expr}, ret_types, &sort_expr, true));
 
   std::shared_ptr<arrow::RecordBatch> input_batch;
   std::vector<std::shared_ptr<arrow::RecordBatch>> input_batch_list;
@@ -126,8 +125,7 @@ TEST(TestArrowComputeSort, SortTestNullsLastAsc) {
   std::vector<std::shared_ptr<Field>> ret_types = {f0, f1};
   ///////////////////// Calculation //////////////////
   std::shared_ptr<CodeGenerator> sort_expr;
-  ASSERT_NOT_OK(
-      CreateCodeGenerator(sch, {sortArrays_expr}, ret_types, &sort_expr, true));
+  ASSERT_NOT_OK(CreateCodeGenerator(sch, {sortArrays_expr}, ret_types, &sort_expr, true));
 
   std::shared_ptr<arrow::RecordBatch> input_batch;
   std::vector<std::shared_ptr<arrow::RecordBatch>> input_batch_list;
@@ -203,8 +201,7 @@ TEST(TestArrowComputeSort, SortTestNullsFirstDesc) {
   std::vector<std::shared_ptr<Field>> ret_types = {f0, f1};
   ///////////////////// Calculation //////////////////
   std::shared_ptr<CodeGenerator> sort_expr;
-  ASSERT_NOT_OK(
-      CreateCodeGenerator(sch, {sortArrays_expr}, ret_types, &sort_expr, true));
+  ASSERT_NOT_OK(CreateCodeGenerator(sch, {sortArrays_expr}, ret_types, &sort_expr, true));
 
   std::shared_ptr<arrow::RecordBatch> input_batch;
   std::vector<std::shared_ptr<arrow::RecordBatch>> input_batch_list;
@@ -280,8 +277,7 @@ TEST(TestArrowComputeSort, SortTestNullsLastDesc) {
   std::vector<std::shared_ptr<Field>> ret_types = {f0, f1};
   ///////////////////// Calculation //////////////////
   std::shared_ptr<CodeGenerator> sort_expr;
-  ASSERT_NOT_OK(
-      CreateCodeGenerator(sch, {sortArrays_expr}, ret_types, &sort_expr, true));
+  ASSERT_NOT_OK(CreateCodeGenerator(sch, {sortArrays_expr}, ret_types, &sort_expr, true));
 
   std::shared_ptr<arrow::RecordBatch> input_batch;
   std::vector<std::shared_ptr<arrow::RecordBatch>> input_batch_list;
@@ -358,8 +354,7 @@ TEST(TestArrowComputeSort, SortTestNullsFirstAscMultipleKeys) {
   std::vector<std::shared_ptr<Field>> ret_types = {f0, f1, f2};
   ///////////////////// Calculation //////////////////
   std::shared_ptr<CodeGenerator> sort_expr;
-  ASSERT_NOT_OK(
-      CreateCodeGenerator(sch, {sortArrays_expr}, ret_types, &sort_expr, true));
+  ASSERT_NOT_OK(CreateCodeGenerator(sch, {sortArrays_expr}, ret_types, &sort_expr, true));
 
   std::shared_ptr<arrow::RecordBatch> input_batch;
   std::vector<std::shared_ptr<arrow::RecordBatch>> input_batch_list;
@@ -428,7 +423,7 @@ TEST(TestArrowComputeSort, SortTestInPlace) {
   ////////////////////// prepare expr_vector ///////////////////////
   auto f0 = field("f0", uint32());
   auto arg_0 = TreeExprBuilder::MakeField(f0);
-  
+
   auto f_res = field("res", uint32());
   auto indices_type = std::make_shared<FixedSizeBinaryType>(16);
   auto f_indices = field("indices", indices_type);
@@ -441,13 +436,12 @@ TEST(TestArrowComputeSort, SortTestInPlace) {
   std::vector<std::shared_ptr<Field>> ret_types = {f0};
   ///////////////////// Calculation //////////////////
   std::shared_ptr<CodeGenerator> sort_expr;
-  ASSERT_NOT_OK(
-      CreateCodeGenerator(sch, {sortArrays_expr}, ret_types, &sort_expr, true));
+  ASSERT_NOT_OK(CreateCodeGenerator(sch, {sortArrays_expr}, ret_types, &sort_expr, true));
 
   std::shared_ptr<arrow::RecordBatch> input_batch;
   std::vector<std::shared_ptr<arrow::RecordBatch>> input_batch_list;
   std::vector<std::shared_ptr<arrow::RecordBatch>> dummy_result_batches;
-  std::shared_ptr<ResultIterator<arrow::RecordBatch>> sort_result_iterator;
+  std::shared_ptr<ResultIteratorBase> sort_result_iterator_base;
 
   std::vector<std::string> input_data_string = {"[10, 12, 4, 50, 52, 32, 11]"};
   MakeInputBatch(input_data_string, sch, &input_batch);
@@ -480,7 +474,11 @@ TEST(TestArrowComputeSort, SortTestInPlace) {
   for (auto batch : input_batch_list) {
     ASSERT_NOT_OK(sort_expr->evaluate(batch, &dummy_result_batches));
   }
-  ASSERT_NOT_OK(sort_expr->finish(&sort_result_iterator));
+  ASSERT_NOT_OK(sort_expr->finish(&sort_result_iterator_base));
+
+  auto sort_result_iterator =
+      std::dynamic_pointer_cast<ResultIterator<arrow::RecordBatch>>(
+          sort_result_iterator_base);
 
   std::shared_ptr<arrow::RecordBatch> dummy_result_batch;
   std::shared_ptr<arrow::RecordBatch> result_batch;
@@ -508,31 +506,34 @@ TEST(TestArrowComputeSort, SortTestInPlaceStr) {
   std::vector<std::shared_ptr<Field>> ret_types = {f0};
   ///////////////////// Calculation //////////////////
   std::shared_ptr<CodeGenerator> sort_expr;
-  ASSERT_NOT_OK(
-      CreateCodeGenerator(sch, {sortArrays_expr}, ret_types, &sort_expr, true));
+  ASSERT_NOT_OK(CreateCodeGenerator(sch, {sortArrays_expr}, ret_types, &sort_expr, true));
 
   std::shared_ptr<arrow::RecordBatch> input_batch;
   std::vector<std::shared_ptr<arrow::RecordBatch>> input_batch_list;
   std::vector<std::shared_ptr<arrow::RecordBatch>> dummy_result_batches;
-  std::shared_ptr<ResultIterator<arrow::RecordBatch>> sort_result_iterator;
+  std::shared_ptr<ResultIteratorBase> sort_result_iterator_base;
 
   std::vector<std::string> input_data_string = {R"(["a", "c", "e", "f", "g","j", "h"])"};
   MakeInputBatch(input_data_string, sch, &input_batch);
   input_batch_list.push_back(input_batch);
 
-  std::vector<std::string> input_data_string_2 = {R"(["a", "a", "a", "u", "f","d", "b"])"};
+  std::vector<std::string> input_data_string_2 = {
+      R"(["a", "a", "a", "u", "f","d", "b"])"};
   MakeInputBatch(input_data_string_2, sch, &input_batch);
   input_batch_list.push_back(input_batch);
 
-  std::vector<std::string> input_data_string_3 = {R"(["a", "e", "t", "w", "j","p", "o"])"};
+  std::vector<std::string> input_data_string_3 = {
+      R"(["a", "e", "t", "w", "j","p", "o"])"};
   MakeInputBatch(input_data_string_3, sch, &input_batch);
   input_batch_list.push_back(input_batch);
 
-  std::vector<std::string> input_data_string_4 = {R"(["g", "a", "a", "t", "b","y", "q"])"};
+  std::vector<std::string> input_data_string_4 = {
+      R"(["g", "a", "a", "t", "b","y", "q"])"};
   MakeInputBatch(input_data_string_4, sch, &input_batch);
   input_batch_list.push_back(input_batch);
 
-  std::vector<std::string> input_data_string_5 = {R"(["a", "a", "y", "o", "s","x", "z"])"};
+  std::vector<std::string> input_data_string_5 = {
+      R"(["a", "a", "y", "o", "s","x", "z"])"};
   MakeInputBatch(input_data_string_5, sch, &input_batch);
   input_batch_list.push_back(input_batch);
 
@@ -545,7 +546,11 @@ TEST(TestArrowComputeSort, SortTestInPlaceStr) {
   for (auto batch : input_batch_list) {
     ASSERT_NOT_OK(sort_expr->evaluate(batch, &dummy_result_batches));
   }
-  ASSERT_NOT_OK(sort_expr->finish(&sort_result_iterator));
+  ASSERT_NOT_OK(sort_expr->finish(&sort_result_iterator_base));
+
+  auto sort_result_iterator =
+      std::dynamic_pointer_cast<ResultIterator<arrow::RecordBatch>>(
+          sort_result_iterator_base);
 
   std::shared_ptr<arrow::RecordBatch> dummy_result_batch;
   std::shared_ptr<arrow::RecordBatch> result_batch;

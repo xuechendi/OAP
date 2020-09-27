@@ -597,31 +597,48 @@ class SortArraysToIndicesVisitorImpl : public ExprVisitorImpl {
 ////////////////////////// ConditionedProbeArraysVisitorImpl ///////////////////////
 class ConditionedProbeArraysVisitorImpl : public ExprVisitorImpl {
  public:
-  ConditionedProbeArraysVisitorImpl(
-      std::vector<std::shared_ptr<arrow::Field>> left_key_list,
-      std::vector<std::shared_ptr<arrow::Field>> right_key_list,
-      std::shared_ptr<gandiva::Node> func_node, int join_type,
-      std::vector<std::shared_ptr<arrow::Field>> left_field_list,
-      std::vector<std::shared_ptr<arrow::Field>> right_field_list,
-      std::vector<std::shared_ptr<arrow::Field>> ret_fields, ExprVisitor* p)
-      : left_key_list_(left_key_list),
-        right_key_list_(right_key_list),
-        join_type_(join_type),
-        func_node_(func_node),
-        left_field_list_(left_field_list),
-        right_field_list_(right_field_list),
+  ConditionedProbeArraysVisitorImpl(std::vector<std::shared_ptr<arrow::Field>> field_list,
+                                    std::shared_ptr<gandiva::FunctionNode> root_node,
+                                    std::vector<std::shared_ptr<arrow::Field>> ret_fields,
+                                    ExprVisitor* p)
+      : root_node_(root_node),
+        field_list_(field_list),
         ret_fields_(ret_fields),
-        ExprVisitorImpl(p) {}
-  static arrow::Status Make(std::vector<std::shared_ptr<arrow::Field>> left_key_list,
-                            std::vector<std::shared_ptr<arrow::Field>> right_key_list,
-                            std::shared_ptr<gandiva::Node> func_node, int join_type,
-                            std::vector<std::shared_ptr<arrow::Field>> left_field_list,
-                            std::vector<std::shared_ptr<arrow::Field>> right_field_list,
+        ExprVisitorImpl(p) {
+    auto func_name = root_node->descriptor()->name();
+    auto children = root_node->children();
+    if (func_name.compare("conditionedProbeArraysInner") == 0) {
+      join_type_ = 0;
+    } else if (func_name.compare("conditionedProbeArraysOuter") == 0) {
+      join_type_ = 1;
+    } else if (func_name.compare("conditionedProbeArraysAnti") == 0) {
+      join_type_ = 2;
+    } else if (func_name.compare("conditionedProbeArraysSemi") == 0) {
+      join_type_ = 3;
+    } else if (func_name.compare("conditionedProbeArraysExistence") == 0) {
+      join_type_ = 4;
+    }
+    left_field_list_ =
+        std::dynamic_pointer_cast<gandiva::FunctionNode>(children[0])->children();
+    right_field_list_ =
+        std::dynamic_pointer_cast<gandiva::FunctionNode>(children[1])->children();
+    left_key_list_ =
+        std::dynamic_pointer_cast<gandiva::FunctionNode>(children[2])->children();
+    right_key_list_ =
+        std::dynamic_pointer_cast<gandiva::FunctionNode>(children[3])->children();
+    result_field_list_ =
+        std::dynamic_pointer_cast<gandiva::FunctionNode>(children[4])->children();
+    if (children.size() > 5) {
+      condition_ =
+          std::dynamic_pointer_cast<gandiva::FunctionNode>(children[5])->children()[0];
+    }
+  }
+  static arrow::Status Make(std::vector<std::shared_ptr<arrow::Field>> field_list,
+                            std::shared_ptr<gandiva::FunctionNode> root_node,
                             std::vector<std::shared_ptr<arrow::Field>> ret_fields,
                             ExprVisitor* p, std::shared_ptr<ExprVisitorImpl>* out) {
-    auto impl = std::make_shared<ConditionedProbeArraysVisitorImpl>(
-        left_key_list, right_key_list, func_node, join_type, left_field_list,
-        right_field_list, ret_fields, p);
+    auto impl = std::make_shared<ConditionedProbeArraysVisitorImpl>(field_list, root_node,
+                                                                    ret_fields, p);
     *out = impl;
     return arrow::Status::OK();
   }
@@ -630,9 +647,9 @@ class ConditionedProbeArraysVisitorImpl : public ExprVisitorImpl {
     if (initialized_) {
       return arrow::Status::OK();
     }
-    RETURN_NOT_OK(extra::ConditionedProbeArraysKernel::Make(
-        &p_->ctx_, left_key_list_, right_key_list_, func_node_, join_type_,
-        left_field_list_, right_field_list_, arrow::schema(ret_fields_), &kernel_));
+    RETURN_NOT_OK(extra::ConditionedProbeKernel::Make(
+        &p_->ctx_, left_key_list_, right_key_list_, left_field_list_, right_field_list_,
+        condition_, join_type_, result_field_list_, 0, &kernel_));
     p_->signature_ = kernel_->GetSignature();
     initialized_ = true;
     finish_return_type_ = ArrowComputeResultType::BatchIterator;
@@ -675,14 +692,16 @@ class ConditionedProbeArraysVisitorImpl : public ExprVisitorImpl {
   }
 
  private:
-  int col_id_;
   int join_type_;
-  std::shared_ptr<gandiva::Node> func_node_;
-  std::vector<std::shared_ptr<arrow::Field>> left_key_list_;
-  std::vector<std::shared_ptr<arrow::Field>> right_key_list_;
-  std::vector<std::shared_ptr<arrow::Field>> left_field_list_;
-  std::vector<std::shared_ptr<arrow::Field>> right_field_list_;
-  std::vector<std::shared_ptr<arrow::Field>> ret_fields_;
+  std::shared_ptr<gandiva::FunctionNode> root_node_;
+  gandiva::NodePtr condition_;
+  gandiva::FieldVector field_list_;
+  gandiva::FieldVector ret_fields_;
+  gandiva::NodeVector left_key_list_;
+  gandiva::NodeVector right_key_list_;
+  gandiva::NodeVector left_field_list_;
+  gandiva::NodeVector right_field_list_;
+  gandiva::NodeVector result_field_list_;
 };
 
 ////////////////////////// ConditionedJoinArraysVisitorImpl ///////////////////////
