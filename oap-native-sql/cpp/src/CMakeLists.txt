@@ -228,8 +228,10 @@ set(SPARK_COLUMNAR_PLUGIN_SRCS
         precompile/hash_arrays_kernel.cc
         )
 
+add_subdirectory(third_party/gandiva)
+message(STATUS "thirdparty is ${THIRDPARTY_GANDIVA_SRCS}")
 file(MAKE_DIRECTORY ${root_directory}/releases)
-add_library(spark_columnar_jni SHARED ${SPARK_COLUMNAR_PLUGIN_SRCS})
+add_library(spark_columnar_jni SHARED ${SPARK_COLUMNAR_PLUGIN_SRCS} ${THIRDPARTY_GANDIVA_SRCS})
 add_dependencies(spark_columnar_jni jni_proto)
 
 if(BUILD_PROTOBUF)
