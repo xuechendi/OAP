@@ -69,7 +69,8 @@ case class ColumnarBroadcastHashJoinExec(
     buildSide: BuildSide,
     condition: Option[Expression],
     left: SparkPlan,
-    right: SparkPlan)
+    right: SparkPlan,
+    projectList: Seq[NamedExpression] = null)
     extends BinaryExecNode
     with ColumnarCodegenSupport
     with HashJoin {
@@ -82,13 +83,14 @@ case class ColumnarBroadcastHashJoinExec(
     "buildTime" -> SQLMetrics.createTimingMetric(sparkContext, "time to build hash map"),
     "joinTime" -> SQLMetrics.createTimingMetric(sparkContext, "join time"))
 
-  val resultSchema = this.schema
   val (buildKeyExprs, streamedKeyExprs) = buildSide match {
     case BuildLeft =>
       (leftKeys, rightKeys)
     case _ =>
       (rightKeys, leftKeys)
   }
+  override def output: Seq[Attribute] =
+    if (projectList == null) super.output else projectList.map(_.toAttribute)
   def getBuildPlan: SparkPlan = buildPlan
   override def supportsColumnar = true
   override protected def doExecute(): RDD[InternalRow] = {

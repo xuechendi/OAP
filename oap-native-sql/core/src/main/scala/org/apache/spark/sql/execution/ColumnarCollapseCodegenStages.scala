@@ -22,7 +22,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import com.intel.oap.execution._
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.expressions.{Attribute, SortOrder}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -136,6 +136,50 @@ case class ColumnarCollapseCodegenStages(
       false
   }
 
+  private def containsExpression(expr: Expression): Boolean = expr match {
+    case a: Alias =>
+      containsExpression(a.child)
+    case a: AttributeReference =>
+      false
+    case other =>
+      true
+  }
+
+  private def containsExpression(projectList: Seq[NamedExpression]): Boolean = {
+    projectList.map(containsExpression).exists(_ == true)
+  }
+
+  private def joinOptimization(plan: ColumnarConditionProjectExec): SparkPlan = {
+    plan.child match {
+      case p: ColumnarBroadcastHashJoinExec
+          if plan.condition == null && !containsExpression(plan.projectList) =>
+        val children = p.children.map(insertWholeStageCodegen)
+        return ColumnarBroadcastHashJoinExec(
+          p.leftKeys,
+          p.rightKeys,
+          p.joinType,
+          p.buildSide,
+          p.condition,
+          children(0),
+          children(1),
+          plan.projectList)
+      case p: ColumnarShuffledHashJoinExec
+          if plan.condition == null && !containsExpression(plan.projectList) =>
+        val children = p.children.map(insertWholeStageCodegen)
+        return ColumnarShuffledHashJoinExec(
+          p.leftKeys,
+          p.rightKeys,
+          p.joinType,
+          p.buildSide,
+          p.condition,
+          children(0),
+          children(1),
+          plan.projectList)
+      case other =>
+    }
+    plan.withNewChildren(plan.children.map(insertWholeStageCodegen))
+  }
+
   /**
    * Inserts an InputAdapter on top of those that do not support codegen.
    */
@@ -144,21 +188,6 @@ case class ColumnarCollapseCodegenStages(
       case p if !supportCodegen(p) =>
         // collapse them recursively
         new ColumnarInputAdapter(insertWholeStageCodegen(p))
-      /*case p: ColumnarBroadcastHashJoinExec =>
-        val numPartitions = p.outputPartitioning.numPartitions
-        p.buildSide match {
-          case BuildLeft =>
-            p.withNewChildren(
-              Seq(DataToArrowColumnarExec(p.left, numPartitions), p.right)
-                .map(insertInputAdapter))
-          case BuildRight =>
-            p.withNewChildren(
-              Seq(p.left, DataToArrowColumnarExec(p.right, numPartitions))
-                .map(insertInputAdapter))
-        }*/
-      /*case j: SortMergeJoinExec =>
-        // The children of SortMergeJoin should do codegen separately.
-        j.withNewChildren(j.children.map(child => InputAdapter(insertWholeStageCodegen(child))))*/
       case p => p.withNewChildren(p.children.map(insertInputAdapter))
     }
   }
@@ -178,7 +207,11 @@ case class ColumnarCollapseCodegenStages(
         ColumnarWholeStageCodegenExec(insertInputAdapter(plan))(
           codegenStageCounter.incrementAndGet())
       case other =>
-        other.withNewChildren(other.children.map(insertWholeStageCodegen))
+        if (other.isInstanceOf[ColumnarConditionProjectExec]) {
+          joinOptimization(other.asInstanceOf[ColumnarConditionProjectExec])
+        } else {
+          other.withNewChildren(other.children.map(insertWholeStageCodegen))
+        }
     }
   }
 

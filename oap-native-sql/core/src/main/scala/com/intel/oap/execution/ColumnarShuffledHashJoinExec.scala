@@ -26,7 +26,7 @@ import org.apache.spark.TaskContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.{Utils, UserAddedJarUtils}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical._
@@ -35,8 +35,6 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
 
 import scala.collection.JavaConverters._
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.expressions.BoundReference
-import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReference
 import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
 import scala.collection.mutable.ListBuffer
@@ -66,7 +64,8 @@ case class ColumnarShuffledHashJoinExec(
     buildSide: BuildSide,
     condition: Option[Expression],
     left: SparkPlan,
-    right: SparkPlan)
+    right: SparkPlan,
+    projectList: Seq[NamedExpression] = null)
     extends BinaryExecNode
     with ColumnarCodegenSupport
     with HashJoin {
@@ -79,14 +78,14 @@ case class ColumnarShuffledHashJoinExec(
     "buildTime" -> SQLMetrics.createTimingMetric(sparkContext, "time to build hash map"),
     "joinTime" -> SQLMetrics.createTimingMetric(sparkContext, "join time"))
 
-  val resultSchema = this.schema
-
   val (buildKeyExprs, streamedKeyExprs) = buildSide match {
     case BuildLeft =>
       (leftKeys, rightKeys)
     case _ =>
       (rightKeys, leftKeys)
   }
+  override def output: Seq[Attribute] =
+    if (projectList == null) super.output else projectList.map(_.toAttribute)
 
   /*protected lazy val (buildPlan, streamedPlan, buildKeys, streamKeys) = buildSide match {
     case BuildLeft => (left, right, leftKeys, rightKeys)
