@@ -127,6 +127,13 @@ arrow::Status ExpressionCodegenVisitor::Visit(const gandiva::FunctionNode& node)
       prepare_str_ += child_visitor_list[i]->GetPrepare();
     }
     codes_str_ = child_visitor_list[0]->GetPreCheck();
+    check_str_ = child_visitor_list[0]->GetPreCheck();
+  } else if (func_name.compare("isnull") == 0) {
+    for (int i = 0; i < 1; i++) {
+      prepare_str_ += child_visitor_list[i]->GetPrepare();
+    }
+    codes_str_ = "!" + child_visitor_list[0]->GetPreCheck();
+    check_str_ = child_visitor_list[0]->GetPreCheck();
   } else if (func_name.compare("substr") == 0) {
     ss << child_visitor_list[0]->GetResult() << ".substr("
        << "((" << child_visitor_list[1]->GetResult() << " - 1) < 0 ? 0 : ("
@@ -239,6 +246,28 @@ arrow::Status ExpressionCodegenVisitor::Visit(const gandiva::FunctionNode& node)
     for (int i = 0; i < 1; i++) {
       prepare_str_ += child_visitor_list[i]->GetPrepare();
     }
+    prepare_str_ += prepare_ss.str();
+    check_str_ = validity;
+  } else if (func_name.compare("round") == 0) {
+    codes_str_ = func_name + "_" + std::to_string(cur_func_id);
+    auto validity = func_name + "_validity_" + std::to_string(cur_func_id);
+    std::stringstream fix_ss;
+    if (child_visitor_list.size() > 1) {
+      fix_ss << ", " << child_visitor_list[1]->GetResult();
+    }
+    for (int i = 0; i < 1; i++) {
+      prepare_str_ += child_visitor_list[i]->GetPrepare();
+    }
+    std::stringstream prepare_ss;
+    prepare_ss << GetCTypeString(node.return_type()) << " " << codes_str_ << ";"
+               << std::endl;
+    prepare_ss << "bool " << validity << " = " << child_visitor_list[0]->GetPreCheck()
+               << ";" << std::endl;
+    prepare_ss << "if (" << validity << ") {" << std::endl;
+    prepare_ss << codes_str_ << " = round_2(" << child_visitor_list[0]->GetResult()
+               << fix_ss.str() << ");" << std::endl;
+    prepare_ss << "}" << std::endl;
+
     prepare_str_ += prepare_ss.str();
     check_str_ = validity;
   } else if (func_name.compare("add") == 0) {
