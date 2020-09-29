@@ -61,6 +61,7 @@ class ExpressionCodegenVisitor : public VisitorBase {
   arrow::Status Visit(const gandiva::InExpressionNode<int>& node) override;
   arrow::Status Visit(const gandiva::InExpressionNode<long int>& node) override;
   arrow::Status Visit(const gandiva::InExpressionNode<std::string>& node) override;
+  std::string decimal_scale_;
 
  private:
   std::shared_ptr<gandiva::Node> func_;

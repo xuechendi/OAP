@@ -2,6 +2,7 @@
 
 #include <arrow/builder.h>
 #include <arrow/compute/context.h>
+#include <arrow/util/decimal.h>
 
 #include <iostream>
 
@@ -18,7 +19,9 @@ namespace precompile {
   arrow::Status TYPENAME::Append(CTYPE value) { return impl_->Append(value); }          \
   arrow::Status TYPENAME::AppendNull() { return impl_->AppendNull(); }                  \
   arrow::Status TYPENAME::Reserve(int64_t length) { return impl_->Reserve(length); }    \
-  arrow::Status TYPENAME::AppendNulls(int64_t length) { return impl_->AppendNulls(length); } \
+  arrow::Status TYPENAME::AppendNulls(int64_t length) {                                 \
+    return impl_->AppendNulls(length);                                                  \
+  }                                                                                     \
   arrow::Status TYPENAME::Finish(std::shared_ptr<arrow::Array>* out) {                  \
     return impl_->Finish(out);                                                          \
   }                                                                                     \
@@ -61,6 +64,28 @@ arrow::Status StringBuilder::Finish(std::shared_ptr<arrow::Array>* out) {
   return impl_->Finish(out);
 }
 arrow::Status StringBuilder::Reset() {
+  impl_->Reset();
+  return arrow::Status::OK();
+}
+
+class Decimal128Builder::Impl : public arrow::Decimal128Builder {
+ public:
+  Impl(std::shared_ptr<arrow::DataType> type, arrow::MemoryPool* pool)
+      : arrow::Decimal128Builder(type, pool) {}
+};
+
+Decimal128Builder::Decimal128Builder(std::shared_ptr<arrow::DataType> type,
+                                     arrow::MemoryPool* pool) {
+  impl_ = std::make_shared<Impl>(type, pool);
+}
+arrow::Status Decimal128Builder::Append(arrow::Decimal128 value) {
+  return impl_->Append(value);
+}
+arrow::Status Decimal128Builder::AppendNull() { return impl_->AppendNull(); }
+arrow::Status Decimal128Builder::Finish(std::shared_ptr<arrow::Array>* out) {
+  return impl_->Finish(out);
+}
+arrow::Status Decimal128Builder::Reset() {
   impl_->Reset();
   return arrow::Status::OK();
 }

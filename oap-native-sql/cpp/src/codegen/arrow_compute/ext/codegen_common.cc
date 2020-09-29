@@ -41,8 +41,9 @@ std::string BaseCodes() {
 #include <arrow/compute/context.h>
 #include <arrow/record_batch.h>
 #include <math.h>
-#include <numeric>
+
 #include <limits>
+#include <numeric>
 
 #include "codegen/arrow_compute/ext/code_generator_base.h"
 #include "precompile/array.h"
@@ -80,6 +81,8 @@ std::string GetArrowTypeDefString(std::shared_ptr<arrow::DataType> type) {
       return "utf8()";
     case arrow::BooleanType::type_id:
       return "boolean()";
+    case arrow::Decimal128Type::type_id:
+      return type->ToString();
     default:
       std::cout << "GetArrowTypeString can't convert " << type->ToString() << std::endl;
       throw;
@@ -115,6 +118,8 @@ std::string GetCTypeString(std::shared_ptr<arrow::DataType> type) {
       return "std::string";
     case arrow::BooleanType::type_id:
       return "bool";
+    case arrow::Decimal128Type::type_id:
+      return "arrow::Decimal128";
     default:
       std::cout << "GetCTypeString can't convert " << type->ToString() << std::endl;
       throw;
@@ -150,6 +155,8 @@ std::string GetTypeString(std::shared_ptr<arrow::DataType> type, std::string tai
       return "String" + tail;
     case arrow::BooleanType::type_id:
       return "Boolean" + tail;
+    case arrow::Decimal128Type::type_id:
+      return "Decimal128" + tail;
     default:
       std::cout << "GetTypeString can't convert " << type->ToString() << std::endl;
       throw;
@@ -229,7 +236,11 @@ std::string GetTemplateString(std::shared_ptr<arrow::DataType> type,
         return template_name + "<bool>";
       else
         return template_name + "<" + prefix + "Boolean" + tail + ">";
-      ;
+    case arrow::DecimalType::type_id:
+      if (tail.empty())
+        return template_name + "<arrow::Decimal128>";
+      else
+        return template_name + "<" + prefix + "Decimal128" + tail + ">";
     default:
       std::cout << "GetTemplateString can't convert " << type->ToString() << std::endl;
       throw;

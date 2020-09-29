@@ -414,9 +414,16 @@ extern "C" void MakeCodeGen(arrow::compute::FunctionContext *ctx,
     std::stringstream codes_ss;
     for (int i = 0; i < output_field_list.size(); i++) {
       auto data_type = output_field_list[i]->type();
-      codes_ss << "builder_" << i << "_ = std::make_shared<"
-               << GetTypeString(data_type, "Builder") << ">(ctx_->memory_pool());"
-               << std::endl;
+      if (data_type->id() == arrow::Type::DECIMAL) {
+        codes_ss << "builder_" << i << "_ = std::make_shared<"
+                 << GetTypeString(data_type, "Builder")
+                 << ">(arrow::" << GetArrowTypeDefString(data_type)
+                 << ", ctx_->memory_pool());" << std::endl;
+      } else {
+        codes_ss << "builder_" << i << "_ = std::make_shared<"
+                 << GetTypeString(data_type, "Builder") << ">(ctx_->memory_pool());"
+                 << std::endl;
+      }
     }
     return codes_ss.str();
   }
