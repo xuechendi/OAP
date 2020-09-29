@@ -148,6 +148,22 @@ class ColumnarBitwiseNot(child: Expression, original: Expression)
   }
 }
 
+class ColumnarCheckOverflow(child: Expression, original: CheckOverflow)
+    extends CheckOverflow(child: Expression, original.dataType: DecimalType, original.nullOnOverflow: Boolean)
+        with ColumnarExpression
+        with Logging {
+  override def doColumnarCodeGen(args: Object): (TreeNode, ArrowType) = {
+    val (child_node, childType): (TreeNode, ArrowType) =
+      child.asInstanceOf[ColumnarExpression].doColumnarCodeGen(args)
+    val resType = CodeGeneration.getResultType(dataType)
+    val funcNode = TreeBuilder.makeFunction(
+      "rescaleDECIMAL",
+      Lists.newArrayList(child_node),
+      resType)
+    (funcNode, resType)
+  }
+}
+
 class ColumnarCast(child: Expression, datatype: DataType, timeZoneId: Option[String], original: Expression)
   extends Cast(child: Expression, datatype: DataType, timeZoneId: Option[String])
     with ColumnarExpression
@@ -242,7 +258,7 @@ object ColumnarUnaryOperator {
     case a: PromotePrecision =>
       child
     case a: CheckOverflow =>
-      child
+      new ColumnarCheckOverflow(child, a)
     case other =>
       throw new UnsupportedOperationException(s"not currently supported: $other.")
   }
