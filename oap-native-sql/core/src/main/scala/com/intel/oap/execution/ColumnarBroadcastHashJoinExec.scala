@@ -125,13 +125,15 @@ case class ColumnarBroadcastHashJoinExec(
 
     val buildInputAttributes: List[Attribute] = buildPlan.output.toList
     val streamInputAttributes: List[Attribute] = streamedPlan.output.toList
-
+    val output_skip_alias =
+      if (projectList == null) super.output
+      else projectList.map(expr => ConverterUtils.getAttrFromExpr(expr, true))
     ColumnarConditionedProbeJoin.prepareKernelFunction(
       buildKeyExprs,
       streamedKeyExprs,
       buildInputAttributes,
       streamInputAttributes,
-      output,
+      output_skip_alias,
       joinType,
       buildSide,
       condition)
@@ -191,14 +193,16 @@ case class ColumnarBroadcastHashJoinExec(
         .build(hash_relation_schema, Lists.newArrayList(hash_relation_expr), true)
       while (depIter.hasNext) {
         val dep_cb = depIter.next()
-        (0 until dep_cb.numCols).toList.foreach(i =>
-          dep_cb.column(i).asInstanceOf[ArrowWritableColumnVector].retain())
-        hashRelationBatchHolder += dep_cb
-        val beforeEval = System.nanoTime()
-        val dep_rb = ConverterUtils.createArrowRecordBatch(dep_cb)
-        hashRelationKernel.evaluate(dep_rb)
-        ConverterUtils.releaseArrowRecordBatch(dep_rb)
-        build_elapse += System.nanoTime() - beforeEval
+        if (dep_cb.numRows > 0) {
+          (0 until dep_cb.numCols).toList.foreach(i =>
+            dep_cb.column(i).asInstanceOf[ArrowWritableColumnVector].retain())
+          hashRelationBatchHolder += dep_cb
+          val beforeEval = System.nanoTime()
+          val dep_rb = ConverterUtils.createArrowRecordBatch(dep_cb)
+          hashRelationKernel.evaluate(dep_rb)
+          ConverterUtils.releaseArrowRecordBatch(dep_rb)
+          build_elapse += System.nanoTime() - beforeEval
+        }
       }
       val hashRelationResultIterator = hashRelationKernel.finishByIterator()
 

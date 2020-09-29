@@ -223,14 +223,16 @@ case class ColumnarWholeStageCodegenExec(child: SparkPlan)(val codegenStageId: I
               .build(ctx.inputSchema, Lists.newArrayList(expression), true)
             while (depIter.hasNext) {
               val dep_cb = depIter.next()
-              (0 until dep_cb.numCols).toList.foreach(i =>
-                dep_cb.column(i).asInstanceOf[ArrowWritableColumnVector].retain())
-              hashRelationBatchHolder += dep_cb
-              val beforeEval = System.nanoTime()
-              val dep_rb = ConverterUtils.createArrowRecordBatch(dep_cb)
-              hashRelationKernel.evaluate(dep_rb)
-              ConverterUtils.releaseArrowRecordBatch(dep_rb)
-              build_elapse += System.nanoTime() - beforeEval
+              if (dep_cb.numRows > 0) {
+                (0 until dep_cb.numCols).toList.foreach(i =>
+                  dep_cb.column(i).asInstanceOf[ArrowWritableColumnVector].retain())
+                hashRelationBatchHolder += dep_cb
+                val beforeEval = System.nanoTime()
+                val dep_rb = ConverterUtils.createArrowRecordBatch(dep_cb)
+                hashRelationKernel.evaluate(dep_rb)
+                ConverterUtils.releaseArrowRecordBatch(dep_rb)
+                build_elapse += System.nanoTime() - beforeEval
+              }
             }
             dependentKernels += hashRelationKernel
             dependentKernelIterators += hashRelationKernel.finishByIterator()

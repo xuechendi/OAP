@@ -130,12 +130,15 @@ case class ColumnarShuffledHashJoinExec(
     // 1. create buildHashRelation RDD ?
     // 2. create streamCodeGen and return
 
+    val output_skip_alias =
+      if (projectList == null) super.output
+      else projectList.map(expr => ConverterUtils.getAttrFromExpr(expr, true))
     ColumnarConditionedProbeJoin.prepareKernelFunction(
       buildKeyExprs,
       streamedKeyExprs,
       buildInputAttributes,
       streamInputAttributes,
-      output,
+      output_skip_alias,
       joinType,
       buildSide,
       condition)

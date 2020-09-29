@@ -50,7 +50,8 @@ case class ColumnarConditionProjectExec(
     case _ => false
   }
 
-  override protected def outputExpressions: Seq[NamedExpression] = projectList
+  override protected def outputExpressions: Seq[NamedExpression] =
+    if (projectList != null) projectList else output
 
   val notNullAttributes = if (condition != null) {
     val (notNullPreds, otherPreds) = splitConjunctivePredicates(condition).partition {
