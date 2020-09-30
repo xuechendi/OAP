@@ -85,6 +85,12 @@ class ProjectKernel::Impl {
       auto output_validity = output_name + "_validity";
       codegen_ctx->output_list.push_back(
           std::make_pair(output_name, project->return_type()));
+      for (auto header : project_node_visitor->GetHeaders()) {
+        if (std::find(codegen_ctx->header_codes.begin(), codegen_ctx->header_codes.end(),
+                      header) == codegen_ctx->header_codes.end()) {
+          codegen_ctx->header_codes.push_back(header);
+        }
+      }
 
       std::stringstream process_ss;
       std::stringstream define_ss;
@@ -170,6 +176,12 @@ class FilterKernel::Impl {
                                                var_id, &input_list,
                                                &condition_node_visitor));
     codegen_ctx->process_codes += condition_node_visitor->GetPrepare();
+    for (auto header : condition_node_visitor->GetHeaders()) {
+      if (std::find(codegen_ctx->header_codes.begin(), codegen_ctx->header_codes.end(),
+                    header) == codegen_ctx->header_codes.end()) {
+        codegen_ctx->header_codes.push_back(header);
+      }
+    }
 
     auto condition_codes = condition_node_visitor->GetResult();
     std::stringstream process_ss;

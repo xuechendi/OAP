@@ -235,8 +235,6 @@ class ConditionedProbeKernel::Impl {
                  << "_validity = " << input[right_key_index_list_[0]] << "_validity;"
                  << std::endl;
     } else {
-      codegen_ctx->header_codes.push_back(
-          R"(#include "third_party/murmurhash/murmurhash32.h")");
       std::shared_ptr<ExpressionCodegenVisitor> project_node_visitor;
       std::vector<std::string> input_list;
       std::vector<int> indices_list;
@@ -250,6 +248,12 @@ class ConditionedProbeKernel::Impl {
                  << std::endl;
       prepare_ss << "auto key_" << hash_relation_id_ << "_validity = " << validity_name
                  << ";" << std::endl;
+      for (auto header : project_node_visitor->GetHeaders()) {
+        if (std::find(codegen_ctx->header_codes.begin(), codegen_ctx->header_codes.end(),
+                      header) == codegen_ctx->header_codes.end()) {
+          codegen_ctx->header_codes.push_back(header);
+        }
+      }
     }
     codegen_ctx->prepare_codes = prepare_ss.str();
     /////   inside loop  //////
@@ -270,6 +274,12 @@ class ConditionedProbeKernel::Impl {
                          << std::endl;
       function_define_ss << "}" << std::endl;
       codegen_ctx->function_list.push_back(function_define_ss.str());
+      for (auto header : condition_node_visitor->GetHeaders()) {
+        if (std::find(codegen_ctx->header_codes.begin(), codegen_ctx->header_codes.end(),
+                      header) == codegen_ctx->header_codes.end()) {
+          codegen_ctx->header_codes.push_back(header);
+        }
+      }
     }
     // set join output list for next kernel.
     ///////////////////////////////

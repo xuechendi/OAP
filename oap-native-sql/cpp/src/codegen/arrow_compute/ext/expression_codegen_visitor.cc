@@ -34,6 +34,7 @@ std::string ExpressionCodegenVisitor::GetPrepare() { return prepare_str_; }
 std::string ExpressionCodegenVisitor::GetPreCheck() { return check_str_; }
 std::string ExpressionCodegenVisitor::GetRealResult() { return real_codes_str_; }
 std::string ExpressionCodegenVisitor::GetRealValidity() { return real_validity_str_; }
+std::vector<std::string> ExpressionCodegenVisitor::GetHeaders() { return header_list_; }
 ExpressionCodegenVisitor::FieldType ExpressionCodegenVisitor::GetFieldType() {
   return field_type_;
 }
@@ -57,6 +58,12 @@ arrow::Status ExpressionCodegenVisitor::Visit(const gandiva::FunctionNode& node)
     } else if (field_type_ != child_visitor->GetFieldType() && field_type_ != literal &&
                child_visitor->GetFieldType() != literal) {
       field_type_ = mixed;
+    }
+    for (auto header : child_visitor->GetHeaders()) {
+      if (std::find(header_list_.begin(), header_list_.end(), header) ==
+          header_list_.end()) {
+        header_list_.push_back(header);
+      }
     }
   }
   if (node.return_type()->id() == arrow::Type::DECIMAL) {
@@ -225,6 +232,7 @@ arrow::Status ExpressionCodegenVisitor::Visit(const gandiva::FunctionNode& node)
     }
     check_str_ = "true";
     codes_str_ = ss.str();
+    header_list_.push_back(R"(#include "third_party/murmurhash/murmurhash32.h")");
   } else if (func_name.compare("castDATE") == 0) {
     codes_str_ = func_name + "_" + std::to_string(cur_func_id);
     auto validity = func_name + "_validity_" + std::to_string(cur_func_id);
@@ -243,6 +251,7 @@ arrow::Status ExpressionCodegenVisitor::Visit(const gandiva::FunctionNode& node)
     }
     prepare_str_ += prepare_ss.str();
     check_str_ = validity;
+    header_list_.push_back(R"(#include "precompile/gandiva.h")");
   } else if (func_name.compare("castDECIMAL") == 0) {
     codes_str_ = func_name + "_" + std::to_string(cur_func_id);
     auto validity = func_name + "_validity_" + std::to_string(cur_func_id);
@@ -270,7 +279,8 @@ arrow::Status ExpressionCodegenVisitor::Visit(const gandiva::FunctionNode& node)
     }
     prepare_str_ += prepare_ss.str();
     check_str_ = validity;
-    } else if (func_name.compare("rescaleDECIMAL") == 0) {
+    header_list_.push_back(R"(#include "precompile/gandiva.h")");
+  } else if (func_name.compare("rescaleDECIMAL") == 0) {
     codes_str_ = func_name + "_" + std::to_string(cur_func_id);
     auto validity = func_name + "_validity_" + std::to_string(cur_func_id);
     std::stringstream fix_ss;
@@ -287,8 +297,8 @@ arrow::Status ExpressionCodegenVisitor::Visit(const gandiva::FunctionNode& node)
     prepare_ss << "bool " << validity << " = " << child_visitor_list[0]->GetPreCheck()
                << ";" << std::endl;
     prepare_ss << "if (" << validity << ") {" << std::endl;
-    prepare_ss << codes_str_ << " = castDECIMAL("
-               << child_visitor_list[0]->GetResult() << fix_ss.str() << ");" << std::endl;
+    prepare_ss << codes_str_ << " = castDECIMAL(" << child_visitor_list[0]->GetResult()
+               << fix_ss.str() << ");" << std::endl;
     prepare_ss << "}" << std::endl;
 
     for (int i = 0; i < 1; i++) {
@@ -296,6 +306,7 @@ arrow::Status ExpressionCodegenVisitor::Visit(const gandiva::FunctionNode& node)
     }
     prepare_str_ += prepare_ss.str();
     check_str_ = validity;
+    header_list_.push_back(R"(#include "precompile/gandiva.h")");
   } else if (func_name.compare("extractYear") == 0) {
     codes_str_ = func_name + "_" + std::to_string(cur_func_id);
     auto validity = func_name + "_validity_" + std::to_string(cur_func_id);
@@ -314,6 +325,7 @@ arrow::Status ExpressionCodegenVisitor::Visit(const gandiva::FunctionNode& node)
     }
     prepare_str_ += prepare_ss.str();
     check_str_ = validity;
+    header_list_.push_back(R"(#include "precompile/gandiva.h")");
   } else if (func_name.compare("round") == 0) {
     codes_str_ = func_name + "_" + std::to_string(cur_func_id);
     auto validity = func_name + "_validity_" + std::to_string(cur_func_id);
@@ -336,6 +348,7 @@ arrow::Status ExpressionCodegenVisitor::Visit(const gandiva::FunctionNode& node)
 
     prepare_str_ += prepare_ss.str();
     check_str_ = validity;
+    header_list_.push_back(R"(#include "precompile/gandiva.h")");
   } else if (func_name.compare("add") == 0) {
     codes_str_ = "add_" + std::to_string(cur_func_id);
     auto validity = "add_validity_" + std::to_string(cur_func_id);
@@ -490,6 +503,12 @@ arrow::Status ExpressionCodegenVisitor::Visit(const gandiva::IfNode& node) {
                child_visitor->GetFieldType() != literal) {
       field_type_ = mixed;
     }
+    for (auto header : child_visitor->GetHeaders()) {
+      if (std::find(header_list_.begin(), header_list_.end(), header) ==
+          header_list_.end()) {
+        header_list_.push_back(header);
+      }
+    }
   }
   for (int i = 0; i < 3; i++) {
     prepare_str_ += child_visitor_list[i]->GetPrepare();
@@ -555,6 +574,12 @@ arrow::Status ExpressionCodegenVisitor::Visit(const gandiva::BooleanNode& node) 
                child_visitor->GetFieldType() != literal) {
       field_type_ = mixed;
     }
+    for (auto header : child_visitor->GetHeaders()) {
+      if (std::find(header_list_.begin(), header_list_.end(), header) ==
+          header_list_.end()) {
+        header_list_.push_back(header);
+      }
+    }
   }
 
   std::stringstream ss;
@@ -601,6 +626,12 @@ arrow::Status ExpressionCodegenVisitor::Visit(
   prepare_str_ = prepare_ss.str();
   field_type_ = child_visitor->GetFieldType();
   prepare_str_ += child_visitor->GetPrepare();
+  for (auto header : child_visitor->GetHeaders()) {
+    if (std::find(header_list_.begin(), header_list_.end(), header) ==
+        header_list_.end()) {
+      header_list_.push_back(header);
+    }
+  }
   return arrow::Status::OK();
 }
 
@@ -635,6 +666,12 @@ arrow::Status ExpressionCodegenVisitor::Visit(
   prepare_str_ = prepare_ss.str();
   field_type_ = child_visitor->GetFieldType();
   prepare_str_ += child_visitor->GetPrepare();
+  for (auto header : child_visitor->GetHeaders()) {
+    if (std::find(header_list_.begin(), header_list_.end(), header) ==
+        header_list_.end()) {
+      header_list_.push_back(header);
+    }
+  }
   return arrow::Status::OK();
 }
 
@@ -669,6 +706,12 @@ arrow::Status ExpressionCodegenVisitor::Visit(
   prepare_str_ = prepare_ss.str();
   field_type_ = child_visitor->GetFieldType();
   prepare_str_ += child_visitor->GetPrepare();
+  for (auto header : child_visitor->GetHeaders()) {
+    if (std::find(header_list_.begin(), header_list_.end(), header) ==
+        header_list_.end()) {
+      header_list_.push_back(header);
+    }
+  }
   return arrow::Status::OK();
 }
 
