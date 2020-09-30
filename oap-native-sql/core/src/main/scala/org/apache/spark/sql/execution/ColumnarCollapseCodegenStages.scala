@@ -111,7 +111,7 @@ class ColumnarInputAdapter(child: SparkPlan) extends InputAdapter(child) {
  * failed to generate/compile code.
  */
 case class ColumnarCollapseCodegenStages(
-    conf: SQLConf,
+    conf: SparkConf,
     codegenStageCounter: AtomicInteger = new AtomicInteger(0))
     extends Rule[SparkPlan] {
 
@@ -216,7 +216,9 @@ case class ColumnarCollapseCodegenStages(
   }
 
   def apply(plan: SparkPlan): SparkPlan = {
-    if (conf.wholeStageEnabled) {
+    def columnarWholeStageEnabled =
+      conf.getBoolean("spark.oap.sql.columnar.wholestagecodegen", defaultValue = true)
+    if (columnarWholeStageEnabled) {
       insertWholeStageCodegen(plan)
     } else {
       plan

@@ -94,6 +94,7 @@ class ConditionedProbeKernel::Impl {
     if (pre_processed_key_) {
       right_key_project_expr_ = GetConcatedKernel(right_key_node_list);
       right_key_project_ = right_key_project_expr_->root();
+      right_key_project_codegen_ = GetConcatedKernel_2(right_key_node_list)->root();
     }
 
     /////////// map result_schema to input schema /////////////
@@ -177,7 +178,7 @@ class ConditionedProbeKernel::Impl {
                      << std::endl;
 
     } else {
-      auto key_type = right_key_project_->return_type();
+      auto key_type = right_key_project_codegen_->return_type();
       if (key_type->id() == arrow::Type::STRING) {
         codegen_ctx->header_codes.push_back(
             R"(#include "codegen/common/hash_relation_string.h")");
@@ -239,7 +240,7 @@ class ConditionedProbeKernel::Impl {
       std::shared_ptr<ExpressionCodegenVisitor> project_node_visitor;
       std::vector<std::string> input_list;
       std::vector<int> indices_list;
-      RETURN_NOT_OK(MakeExpressionCodegenVisitor(right_key_project_, input,
+      RETURN_NOT_OK(MakeExpressionCodegenVisitor(right_key_project_codegen_, input,
                                                  {right_field_list_}, -1, var_id,
                                                  &input_list, &project_node_visitor));
       prepare_ss << project_node_visitor->GetPrepare();
@@ -282,8 +283,9 @@ class ConditionedProbeKernel::Impl {
   std::string signature_;
   int join_type_;
   gandiva::ExpressionPtr right_key_project_expr_;
-  gandiva::NodePtr condition_;
   gandiva::NodePtr right_key_project_;
+  gandiva::NodePtr right_key_project_codegen_;
+  gandiva::NodePtr condition_;
 
   bool pre_processed_key_ = false;
   gandiva::FieldVector left_field_list_;

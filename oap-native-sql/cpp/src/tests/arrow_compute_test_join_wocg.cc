@@ -136,7 +136,9 @@ TEST(TestArrowComputeWSCG, JoinWOCGTestStringInnerJoin) {
   auto schema_table =
       arrow::schema({table0_f0, table0_f1, table0_f2, table1_f0, table1_f1});
 
-  auto n_hash = TreeExprBuilder::MakeFunction("HashRelation", {n_left_key}, uint32());
+  auto n_hash_kernel =
+      TreeExprBuilder::MakeFunction("HashRelation", {n_left_key}, uint32());
+  auto n_hash = TreeExprBuilder::MakeFunction("standalone", {n_hash_kernel}, uint32());
   auto hashRelation_expr = TreeExprBuilder::MakeExpression(n_hash, f_res);
   std::shared_ptr<CodeGenerator> expr_build;
   ASSERT_NOT_OK(
@@ -265,7 +267,9 @@ TEST(TestArrowComputeWSCG, JoinWOCGTestTwoStringInnerJoin) {
   auto schema_table =
       arrow::schema({table0_f0, table0_f1, table0_f2, table1_f0, table1_f1});
 
-  auto n_hash = TreeExprBuilder::MakeFunction("HashRelation", {n_left_key}, uint32());
+  auto n_hash_kernel =
+      TreeExprBuilder::MakeFunction("HashRelation", {n_left_key}, uint32());
+  auto n_hash = TreeExprBuilder::MakeFunction("standalone", {n_hash_kernel}, uint32());
   auto hashRelation_expr = TreeExprBuilder::MakeExpression(n_hash, f_res);
   std::shared_ptr<CodeGenerator> expr_build;
   ASSERT_NOT_OK(
@@ -387,7 +391,9 @@ TEST(TestArrowComputeWSCG, JoinWOCGTestOuterJoin) {
   auto schema_table =
       arrow::schema({table0_f0, table0_f1, table0_f2, table1_f0, table1_f1});
 
-  auto n_hash = TreeExprBuilder::MakeFunction("HashRelation", {n_left_key}, uint32());
+  auto n_hash_kernel =
+      TreeExprBuilder::MakeFunction("HashRelation", {n_left_key}, uint32());
+  auto n_hash = TreeExprBuilder::MakeFunction("standalone", {n_hash_kernel}, uint32());
   auto hashRelation_expr = TreeExprBuilder::MakeExpression(n_hash, f_res);
   std::shared_ptr<CodeGenerator> expr_build;
   ASSERT_NOT_OK(
@@ -509,7 +515,9 @@ TEST(TestArrowComputeWSCG, JoinWOCGTestAntiJoin) {
   auto schema_table =
       arrow::schema({table0_f0, table0_f1, table0_f2, table1_f0, table1_f1});
 
-  auto n_hash = TreeExprBuilder::MakeFunction("HashRelation", {n_left_key}, uint32());
+  auto n_hash_kernel =
+      TreeExprBuilder::MakeFunction("HashRelation", {n_left_key}, uint32());
+  auto n_hash = TreeExprBuilder::MakeFunction("standalone", {n_hash_kernel}, uint32());
   auto hashRelation_expr = TreeExprBuilder::MakeExpression(n_hash, f_res);
   std::shared_ptr<CodeGenerator> expr_build;
   ASSERT_NOT_OK(
@@ -624,7 +632,9 @@ TEST(TestArrowComputeWSCG, JoinWOCGTestSemiJoin) {
   auto schema_table_1 = arrow::schema({table1_f0, table1_f1});
   auto schema_table = arrow::schema({table1_f0, table1_f1});
 
-  auto n_hash = TreeExprBuilder::MakeFunction("HashRelation", {n_left_key}, uint32());
+  auto n_hash_kernel =
+      TreeExprBuilder::MakeFunction("HashRelation", {n_left_key}, uint32());
+  auto n_hash = TreeExprBuilder::MakeFunction("standalone", {n_hash_kernel}, uint32());
   auto hashRelation_expr = TreeExprBuilder::MakeExpression(n_hash, f_res);
   std::shared_ptr<CodeGenerator> expr_build;
   ASSERT_NOT_OK(
@@ -744,7 +754,9 @@ TEST(TestArrowComputeWSCG, JoinWOCGTestExistenceJoin) {
   auto schema_table =
       arrow::schema({table0_f0, table0_f1, table0_f2, table1_f0, table1_f1});
 
-  auto n_hash = TreeExprBuilder::MakeFunction("HashRelation", {n_left_key}, uint32());
+  auto n_hash_kernel =
+      TreeExprBuilder::MakeFunction("HashRelation", {n_left_key}, uint32());
+  auto n_hash = TreeExprBuilder::MakeFunction("standalone", {n_hash_kernel}, uint32());
   auto hashRelation_expr = TreeExprBuilder::MakeExpression(n_hash, f_res);
   std::shared_ptr<CodeGenerator> expr_build;
   ASSERT_NOT_OK(
@@ -866,7 +878,9 @@ TEST(TestArrowComputeWSCG, JoinWOCGTestExistenceJoin2) {
   auto schema_table =
       arrow::schema({table0_f0, table0_f1, table0_f2, table1_f0, table1_f1});
 
-  auto n_hash = TreeExprBuilder::MakeFunction("HashRelation", {n_left_key}, uint32());
+  auto n_hash_kernel =
+      TreeExprBuilder::MakeFunction("HashRelation", {n_left_key}, uint32());
+  auto n_hash = TreeExprBuilder::MakeFunction("standalone", {n_hash_kernel}, uint32());
   auto hashRelation_expr = TreeExprBuilder::MakeExpression(n_hash, f_res);
   std::shared_ptr<CodeGenerator> expr_build;
   ASSERT_NOT_OK(

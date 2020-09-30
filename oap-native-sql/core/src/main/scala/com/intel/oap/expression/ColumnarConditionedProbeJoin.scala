@@ -54,7 +54,8 @@ import com.intel.oap.vectorized.BatchIterator
 object ColumnarConditionedProbeJoin extends Logging {
   def prepareHashBuildFunction(
       buildKeys: Seq[Expression],
-      buildInputAttributes: Seq[Attribute]): TreeNode = {
+      buildInputAttributes: Seq[Attribute],
+      builder_type: Int = 0): TreeNode = {
     val buildInputFieldList: List[Field] = buildInputAttributes.toList.map(attr => {
       if (attr.dataType.isInstanceOf[DecimalType])
         throw new UnsupportedOperationException(
@@ -74,12 +75,20 @@ object ColumnarConditionedProbeJoin extends Logging {
       "hash_key_schema",
       buildKeysFunctionList.asJava,
       new ArrowType.Int(32, true) /*dummy ret type, won't be used*/ )
-
-    // Make Expresion for conditionedProbe
-    TreeBuilder.makeFunction(
-      "HashRelation",
-      Lists.newArrayList(build_keys_node),
+    val builder_type_node = TreeBuilder.makeLiteral(builder_type.asInstanceOf[Integer])
+    val build_keys_config_node = TreeBuilder.makeFunction(
+      "build_keys_config_node",
+      Lists.newArrayList(builder_type_node),
       new ArrowType.Int(32, true) /*dummy ret type, won't be used*/ )
+    // Make Expresion for conditionedProbe
+    val hash_relation_kernel = TreeBuilder.makeFunction(
+      "HashRelation",
+      Lists.newArrayList(build_keys_node, build_keys_config_node),
+      new ArrowType.Int(32, true) /*dummy ret type, won't be used*/ )
+    TreeBuilder.makeFunction(
+      s"standalone",
+      Lists.newArrayList(hash_relation_kernel),
+      new ArrowType.Int(32, true))
   }
 
   def prepareKernelFunction(

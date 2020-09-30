@@ -62,8 +62,18 @@ class HashRelationKernel::Impl {
 
     bool need_project = true;
     std::vector<gandiva::FieldPtr> key_fields;
-    auto key_nodes =
+    auto children =
         std::dynamic_pointer_cast<gandiva::FunctionNode>(root_node)->children();
+    auto key_nodes =
+        std::dynamic_pointer_cast<gandiva::FunctionNode>(children[0])->children();
+    int builder_type = 0;
+    if (children.size() > 1) {
+      auto parameter_nodes =
+          std::dynamic_pointer_cast<gandiva::FunctionNode>(children[1])->children();
+      auto builder_type_str = gandiva::ToString(
+          std::dynamic_pointer_cast<gandiva::LiteralNode>(parameter_nodes[0])->holder());
+      builder_type = std::stoi(builder_type_str);
+    }
     if (key_nodes.size() == 1) {
       auto key_node = key_nodes[0];
       std::shared_ptr<TypedNodeVisitor> node_visitor;
@@ -80,7 +90,12 @@ class HashRelationKernel::Impl {
       THROW_NOT_OK(MakeHashRelation(key_fields[0]->type()->id(), ctx_, hash_relation_list,
                                     &hash_relation_));
     } else {
-      auto project_expr = GetConcatedKernel(key_nodes);
+      gandiva::ExpressionPtr project_expr;
+      if (builder_type == 0) {
+        project_expr = GetConcatedKernel(key_nodes);
+      } else {
+        project_expr = GetConcatedKernel_2(key_nodes);
+      }
       auto schema = arrow::schema(input_field_list);
       auto configuration = gandiva::ConfigurationBuilder().DefaultConfiguration();
       THROW_NOT_OK(gandiva::Projector::Make(schema, {project_expr}, configuration,

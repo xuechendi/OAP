@@ -117,7 +117,7 @@ case class ColumnarShuffledHashJoinExec(
     ColumnarCodegenContext(
       inputSchema,
       null,
-      ColumnarConditionedProbeJoin.prepareHashBuildFunction(buildKeyExprs, buildPlan.output))
+      ColumnarConditionedProbeJoin.prepareHashBuildFunction(buildKeyExprs, buildPlan.output, 1))
   }
 
   override def supportColumnarCodegen: Boolean = true
@@ -172,6 +172,13 @@ case class ColumnarShuffledHashJoinExec(
   }
 
   override def doExecuteColumnar(): RDD[ColumnarBatch] = {
+// we will use previous codegen join to handle joins with condition
+    if (condition.isDefined) {
+      return getCodeGenIterator
+    }
+
+    // below only handles join without condition
+
     val numOutputRows = longMetric("numOutputRows")
     val numOutputBatches = longMetric("numOutputBatches")
     val totalTime = longMetric("processTime")
@@ -274,5 +281,98 @@ case class ColumnarShuffledHashJoinExec(
     case that: ColumnarShuffledHashJoinExec =>
       (that canEqual this) && super.equals(that)
     case _ => false
+  }
+
+  //////////////////////////////////////////////////////////////////////////////////////////////////////
+  def getResultSchema = {
+    val attributes =
+      if (projectList == null) super.output
+      else projectList.map(expr => ConverterUtils.getAttrFromExpr(expr, true))
+    ArrowUtils.fromAttributes(attributes)
+  }
+
+  def getCodeGenSignature =
+    try {
+      ColumnarShuffledHashJoin.prebuild(
+        leftKeys,
+        rightKeys,
+        getResultSchema,
+        joinType,
+        buildSide,
+        condition,
+        left,
+        right,
+        sparkConf)
+    } catch {
+      case e: UnsupportedOperationException
+          if e.getMessage == "Unsupport to generate native expression from replaceable expression." =>
+        logWarning(e.getMessage())
+        ""
+      case e: Throwable =>
+        throw e
+    }
+
+  def uploadAndListJars(signature: String): Seq[String] =
+    if (signature != "") {
+      if (sparkContext.listJars.filter(path => path.contains(s"${signature}.jar")).isEmpty) {
+        val tempDir = ColumnarPluginConfig.getRandomTempDir
+        val jarFileName =
+          s"${tempDir}/tmp/spark-columnar-plugin-codegen-precompile-${signature}.jar"
+        sparkContext.addJar(jarFileName)
+        sparkContext.listJars.filter(path => path.contains(s"${signature}.jar"))
+      } else {
+        Seq()
+      }
+    } else {
+      Seq()
+    }
+
+  def getCodeGenIterator: RDD[ColumnarBatch] = {
+    val numOutputRows = longMetric("numOutputRows")
+    val numOutputBatches = longMetric("numOutputBatches")
+    val totalTime = longMetric("processTime")
+    val buildTime = longMetric("buildTime")
+    val joinTime = longMetric("joinTime")
+
+    val signature = getCodeGenSignature
+    val listJars = uploadAndListJars(signature)
+    streamedPlan.executeColumnar().zipPartitions(buildPlan.executeColumnar()) {
+      (streamIter, buildIter) =>
+        ColumnarPluginConfig.getConf(sparkConf)
+        val execTempDir = ColumnarPluginConfig.getTempFile
+        val jarList = listJars
+          .map(jarUrl => {
+            logWarning(s"Get Codegened library Jar ${jarUrl}")
+            UserAddedJarUtils.fetchJarFromSpark(
+              jarUrl,
+              execTempDir,
+              s"spark-columnar-plugin-codegen-precompile-${signature}.jar",
+              sparkConf)
+            s"${execTempDir}/spark-columnar-plugin-codegen-precompile-${signature}.jar"
+          })
+        val vjoin = ColumnarShuffledHashJoin.create(
+          leftKeys,
+          rightKeys,
+          getResultSchema,
+          joinType,
+          buildSide,
+          condition,
+          left,
+          right,
+          jarList,
+          buildTime,
+          joinTime,
+          totalTime,
+          numOutputRows,
+          sparkConf)
+        TaskContext
+          .get()
+          .addTaskCompletionListener[Unit](_ => {
+            vjoin.close()
+          })
+        val vjoinResult = vjoin.columnarJoin(streamIter, buildIter)
+        new CloseableColumnBatchIterator(vjoinResult)
+    }
+
   }
 }

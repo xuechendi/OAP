@@ -297,7 +297,7 @@ std::pair<int, int> GetFieldIndex(gandiva::FieldPtr target_field,
   return std::make_pair(index, arg_id);
 }
 
-gandiva::ExpressionPtr GetConcatedKernel(std::vector<gandiva::NodePtr> key_list) {
+gandiva::ExpressionPtr GetConcatedKernel_2(std::vector<gandiva::NodePtr> key_list) {
   std::vector<std::shared_ptr<gandiva::Node>> func_node_list = {};
   std::shared_ptr<arrow::DataType> ret_type;
   if (key_list.size() >= 2) {
@@ -311,6 +311,36 @@ gandiva::ExpressionPtr GetConcatedKernel(std::vector<gandiva::NodePtr> key_list)
       seed = func_node;
     }
     func_node_list.push_back(func_node);
+  } else {
+    auto node = key_list[0];
+    ret_type = node->return_type();
+    func_node_list.push_back(node);
+  }
+  return gandiva::TreeExprBuilder::MakeExpression(
+      func_node_list[0], arrow::field("projection_key", ret_type));
+}
+
+gandiva::ExpressionPtr GetConcatedKernel(std::vector<gandiva::NodePtr> key_list) {
+  std::vector<std::shared_ptr<gandiva::Node>> func_node_list = {};
+  std::shared_ptr<arrow::DataType> ret_type;
+  if (key_list.size() >= 2) {
+    ret_type = arrow::int64();
+    for (auto key : key_list) {
+      auto field_node = key;
+      auto func_node =
+          gandiva::TreeExprBuilder::MakeFunction("hash64", {field_node}, arrow::int64());
+      func_node_list.push_back(func_node);
+      if (func_node_list.size() == 2) {
+        auto shift_func_node = gandiva::TreeExprBuilder::MakeFunction(
+            "multiply",
+            {func_node_list[0], gandiva::TreeExprBuilder::MakeLiteral((int64_t)10)},
+            arrow::int64());
+        auto tmp_func_node = gandiva::TreeExprBuilder::MakeFunction(
+            "add", {shift_func_node, func_node_list[1]}, arrow::int64());
+        func_node_list.clear();
+        func_node_list.push_back(tmp_func_node);
+      }
+    }
   } else {
     auto node = key_list[0];
     ret_type = node->return_type();
