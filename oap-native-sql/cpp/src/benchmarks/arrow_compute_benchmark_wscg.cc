@@ -157,8 +157,10 @@ TEST_F(BenchmarkArrowComputeWSCG, JoinBenchmark) {
       TreeExprBuilder::MakeFunction("wholestagecodegen", {n_child_probe}, uint32());
   auto probeArrays_expr = TreeExprBuilder::MakeExpression(n_wscg, f_res);
 
-  auto n_hash_kernel =
-      TreeExprBuilder::MakeFunction("HashRelation", {n_left_key}, uint32());
+  auto n_hash_config = TreeExprBuilder::MakeFunction(
+      "build_keys_config_node", {TreeExprBuilder::MakeLiteral((int)1)}, uint32());
+  auto n_hash_kernel = TreeExprBuilder::MakeFunction(
+      "HashRelation", {n_left_key, n_hash_config}, uint32());
   auto n_hash = TreeExprBuilder::MakeFunction("standalone", {n_hash_kernel}, uint32());
   auto hashRelation_expr = TreeExprBuilder::MakeExpression(n_hash, f_res);
   std::shared_ptr<CodeGenerator> expr_build;
@@ -294,8 +296,10 @@ TEST_F(BenchmarkArrowComputeWSCG, MultipleJoinBenchmark) {
       TreeExprBuilder::MakeFunction("wholestagecodegen", {n_child_probe_1}, uint32());
   auto probeArrays_expr = TreeExprBuilder::MakeExpression(n_wscg, f_res);
 
-  auto n_hash_kernel =
-      TreeExprBuilder::MakeFunction("HashRelation", {n_left_key}, uint32());
+  auto n_hash_config = TreeExprBuilder::MakeFunction(
+      "build_keys_config_node", {TreeExprBuilder::MakeLiteral((int)1)}, uint32());
+  auto n_hash_kernel = TreeExprBuilder::MakeFunction(
+      "HashRelation", {n_left_key, n_hash_config}, uint32());
   auto n_hash = TreeExprBuilder::MakeFunction("standalone", {n_hash_kernel}, uint32());
   auto hashRelation_expr = TreeExprBuilder::MakeExpression(n_hash, f_res);
   std::shared_ptr<CodeGenerator> expr_build_0;
