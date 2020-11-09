@@ -146,7 +146,7 @@ object ConverterUtils extends Logging {
       attributes: Seq[Attribute],
       input: InputStream): Iterator[ColumnarBatch] = {
     new Iterator[ColumnarBatch] {
-      val allocator = ArrowWritableColumnVector.getAllocator
+      val allocator = ArrowWritableColumnVector.getOffRecordAllocator
       var messageReader =
         new MessageChannelReader(new ReadChannel(Channels.newChannel(input)), allocator)
       var schema: Schema = null
@@ -213,7 +213,7 @@ object ConverterUtils extends Logging {
       data: Array[Array[Byte]]): Iterator[ColumnarBatch] = {
     new Iterator[ColumnarBatch] {
       var array_id = 0
-      val allocator = ArrowWritableColumnVector.getAllocator
+      val allocator = ArrowWritableColumnVector.getOffRecordAllocator
       var input = new ByteArrayInputStream(data(array_id))
       var messageReader =
         new MessageChannelReader(new ReadChannel(Channels.newChannel(input)), allocator)
