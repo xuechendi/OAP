@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package com.intel.oap.execution
+package org.apache.spark.sql.execution
 
 import java.io._
 import java.util.concurrent.atomic.{AtomicInteger, AtomicBoolean}
@@ -23,6 +23,7 @@ import com.esotericsoftware.kryo.{Kryo, KryoSerializable}
 import com.esotericsoftware.kryo.io.{Input, Output}
 import com.intel.oap.expression.ConverterUtils
 import com.intel.oap.vectorized.{ArrowWritableColumnVector, SerializableObject}
+import org.apache.spark.util.{KnownSizeEstimation, Utils}
 import org.apache.spark.sql.vectorized.{ColumnVector, ColumnarBatch}
 import scala.concurrent.Future
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -34,7 +35,8 @@ class ColumnarHashedRelation(
     var arrowColumnarBatch: Array[ColumnarBatch],
     var arrowColumnarBatchSize: Int)
     extends Externalizable
-    with KryoSerializable {
+    with KryoSerializable
+    with KnownSizeEstimation {
   val refCnt: AtomicInteger = new AtomicInteger()
   val closed: AtomicBoolean = new AtomicBoolean()
 
@@ -47,6 +49,8 @@ class ColumnarHashedRelation(
     refCnt.incrementAndGet()
     this
   }
+
+  override def estimatedSize: Long = 0
 
   def close(waitTime: Int): Future[Int] = Future {
     Thread.sleep(waitTime * 1000)

@@ -1,7 +1,6 @@
 package org.apache.spark.sql.execution
 
 import com.google.common.collect.Lists;
-import com.intel.oap.execution.ColumnarHashedRelation
 import com.intel.oap.expression._
 import com.intel.oap.vectorized.{ArrowWritableColumnVector, ExpressionEvaluator, BatchIterator}
 import io.netty.buffer.{ByteBuf, ByteBufAllocator, ByteBufOutputStream}
@@ -17,7 +16,7 @@ import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.sql.catalyst.plans.physical.BroadcastMode
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, SortOrder}
 import org.apache.spark.sql.catalyst.expressions.BoundReference
-import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
+import org.apache.spark.sql.execution.{SparkPlan, SQLExecution, ColumnarHashedRelation}
 import org.apache.spark.sql.execution.joins.HashedRelationBroadcastMode
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
