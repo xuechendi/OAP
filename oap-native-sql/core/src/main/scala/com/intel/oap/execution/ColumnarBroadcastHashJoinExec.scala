@@ -174,6 +174,18 @@ case class ColumnarBroadcastHashJoinExec(
     ColumnarCodegenContext(inputSchema, outputSchema, codeGenNode)
   }
 
+  def doCodeGenForStandalone: ColumnarCodegenContext = {
+    val outputSchema = ConverterUtils.toArrowSchema(output)
+    val (codeGenNode, inputSchema) = (
+      TreeBuilder
+        .makeFunction(
+          s"child",
+          Lists.newArrayList(getKernelFunction),
+          new ArrowType.Int(32, true)),
+      ConverterUtils.toArrowSchema(streamedPlan.output))
+    ColumnarCodegenContext(inputSchema, outputSchema, codeGenNode)
+  }
+
   override def doExecuteColumnar(): RDD[ColumnarBatch] = {
     // we will use previous codegen join to handle joins with condition
     if (condition.isDefined) {
@@ -325,7 +337,7 @@ case class ColumnarBroadcastHashJoinExec(
     var resCtx: ColumnarCodegenContext = null
     try {
       // If this BHJ contains condition, currently we only support doing codegen through WSCG
-      val childCtx = doCodeGen
+      val childCtx = doCodeGenForStandalone
       val wholeStageCodeGenNode = TreeBuilder.makeFunction(
         s"wholestagecodegen",
         Lists.newArrayList(childCtx.root),
