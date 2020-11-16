@@ -1380,8 +1380,9 @@ class ConcatArrayKernel::Impl {
     }
 
     builder_->Reset();
+    std::shared_ptr<UnsafeRow> payload = std::make_shared<UnsafeRow>(payloads.size());
     for (int i = 0; i < length; i++) {
-      std::shared_ptr<UnsafeRow> payload = std::make_shared<UnsafeRow>(payloads.size());
+      payload->reset();
       for (auto payload_arr : payloads) {
         RETURN_NOT_OK(payload_arr->Append(i, &payload));
       }

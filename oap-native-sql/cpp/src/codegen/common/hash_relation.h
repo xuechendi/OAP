@@ -142,8 +142,9 @@ class HashRelation {
       const std::vector<std::shared_ptr<UnsafeArray>>& payloads) {
     // This Key should be Hash Key
     auto typed_array = std::make_shared<ArrayType>(in);
+    std::shared_ptr<UnsafeRow> payload = std::make_shared<UnsafeRow>(payloads.size());
     for (int i = 0; i < typed_array->length(); i++) {
-      std::shared_ptr<UnsafeRow> payload = std::make_shared<UnsafeRow>(payloads.size());
+      payload->reset();
       for (auto payload_arr : payloads) {
         payload_arr->Append(i, &payload);
       }
