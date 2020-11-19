@@ -124,6 +124,7 @@ class HashRelation {
       int key_size = -1)
       : HashRelation(hash_relation_column) {
     hash_table_ = createUnsafeHashMap(1024 * 1024, 256 * 1024 * 1024, key_size);
+    arrayid_list_.reserve(64);
   }
 
   ~HashRelation() {
@@ -191,13 +192,9 @@ class HashRelation {
     if (hash_table_ == nullptr) {
       throw std::runtime_error("HashRelation Get failed, hash_table is null.");
     }
-    std::vector<char*> res_out;
-    auto res = safeLookup(hash_table_, payload, v, &res_out);
+    auto res = safeLookup(hash_table_, payload, v, &arrayid_list_);
     if (res == -1) return -1;
-    arrayid_list_.clear();
-    for (auto index : res_out) {
-      arrayid_list_.push_back(*((ArrayItemIndex*)index));
-    }
+
     return 0;
   }
 
@@ -205,13 +202,8 @@ class HashRelation {
     if (hash_table_ == nullptr) {
       throw std::runtime_error("HashRelation Get failed, hash_table is null.");
     }
-    std::vector<char*> res_out;
-    auto res = safeLookup(hash_table_, payload.data(), payload.size(), v, &res_out);
+    auto res = safeLookup(hash_table_, payload.data(), payload.size(), v, &arrayid_list_);
     if (res == -1) return -1;
-    arrayid_list_.clear();
-    for (auto index : res_out) {
-      arrayid_list_.push_back(*((ArrayItemIndex*)index));
-    }
     return 0;
   }
 
@@ -219,13 +211,8 @@ class HashRelation {
     if (hash_table_ == nullptr) {
       throw std::runtime_error("HashRelation Get failed, hash_table is null.");
     }
-    std::vector<char*> res_out;
-    auto res = safeLookup(hash_table_, payload, v, &res_out);
+    auto res = safeLookup(hash_table_, payload, v, &arrayid_list_);
     if (res == -1) return -1;
-    arrayid_list_.clear();
-    for (auto index : res_out) {
-      arrayid_list_.push_back(*((ArrayItemIndex*)index));
-    }
     return 0;
   }
 
