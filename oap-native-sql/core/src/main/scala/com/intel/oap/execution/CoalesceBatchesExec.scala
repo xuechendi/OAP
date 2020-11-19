@@ -67,8 +67,6 @@ case class CoalesceBatchesExec(child: SparkPlan) extends UnaryExecNode {
     val concatTime = longMetric("concatTime")
     val avgCoalescedNumRows = longMetric("avgCoalescedNumRows")
 
-    var allocator: BufferAllocator = null
-
     child.executeColumnar().mapPartitions { iter =>
       val beforeInput = System.nanoTime
       val hasInput = iter.hasNext
@@ -85,8 +83,6 @@ case class CoalesceBatchesExec(child: SparkPlan) extends UnaryExecNode {
             if (numBatchesTotal > 0) {
               avgCoalescedNumRows.set(numRowsTotal.toDouble / numBatchesTotal)
             }
-            System.out.println(
-              s"coalecse input should be cleaned, schema is ${resultStructType}, allocator stat is ${allocator.toVerboseString}")
           }
 
           override def hasNext: Boolean = {
@@ -110,18 +106,11 @@ case class CoalesceBatchesExec(child: SparkPlan) extends UnaryExecNode {
               delta.retain()
               rowCount += delta.numRows
               batchesToAppend += delta
-              if (allocator == null) {
-                allocator = delta
-                  .column(0)
-                  .asInstanceOf[ArrowWritableColumnVector]
-                  .getValueVector
-                  .getAllocator
-              }
             }
 
             val beforeConcat = System.nanoTime
             val resultColumnVectors =
-              ArrowWritableColumnVector.allocateColumnsUnsafe(rowCount, resultStructType).toArray
+              ArrowWritableColumnVector.allocateColumns(rowCount, resultStructType).toArray
             val target =
               new ColumnarBatch(resultColumnVectors.map(_.asInstanceOf[ColumnVector]), rowCount)
             coalesce(target, batchesToAppend.toList)
