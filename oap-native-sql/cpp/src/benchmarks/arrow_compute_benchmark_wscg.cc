@@ -46,283 +46,313 @@ class BenchmarkArrowComputeWSCG : public ::testing::Test {
 #else
     std::string dir_path = "";
 #endif
-    std::string left_path = dir_path + "tpch_lineitem_join.parquet";
-    std::string right_path = dir_path + "tpch_order_join.parquet";
-    std::cout << "This Benchmark used file " << left_path << " and " << right_path
-              << ", please download from server "
-                 "vsr200://home/zhouyuan/sparkColumnarPlugin/source_files"
-              << std::endl;
-    std::shared_ptr<arrow::fs::FileSystem> right_fs;
-    std::shared_ptr<arrow::fs::FileSystem> left_fs;
-    std::string right_file_name;
-    std::string left_file_name;
-    ASSERT_OK_AND_ASSIGN(right_fs,
-                         arrow::fs::FileSystemFromUri(right_path, &right_file_name));
-    ASSERT_OK_AND_ASSIGN(left_fs,
-                         arrow::fs::FileSystemFromUri(left_path, &left_file_name));
+    std::string build_path_1 = dir_path + "tpch_500/supplier";
+    std::string build_path_2 = dir_path + "tpch_500/nation";
+    std::string build_path_3 = dir_path + "tpch_500/region";
+    std::string stream_path = dir_path + "tpch_500/partsupp";
 
-    ARROW_ASSIGN_OR_THROW(right_file, right_fs->OpenInputFile(right_file_name));
-    ARROW_ASSIGN_OR_THROW(left_file, left_fs->OpenInputFile(left_file_name));
+    std::cout << "Read files are " << build_path_1 << ", " << build_path_2 << ", "
+              << build_path_3 << ", " << stream_path << std::endl;
+    std::shared_ptr<arrow::fs::FileSystem> build_1_fs;
+    std::shared_ptr<arrow::fs::FileSystem> build_2_fs;
+    std::shared_ptr<arrow::fs::FileSystem> build_3_fs;
+    std::shared_ptr<arrow::fs::FileSystem> stream_fs;
+    std::string build_1_file_name;
+    std::string build_2_file_name;
+    std::string build_3_file_name;
+    std::string stream_file_name;
+    ASSERT_OK_AND_ASSIGN(build_1_fs,
+                         arrow::fs::FileSystemFromUri(build_path_1, &build_1_file_name));
+    ASSERT_OK_AND_ASSIGN(build_2_fs,
+                         arrow::fs::FileSystemFromUri(build_path_2, &build_2_file_name));
+    ASSERT_OK_AND_ASSIGN(build_3_fs,
+                         arrow::fs::FileSystemFromUri(build_path_3, &build_3_file_name));
+    ASSERT_OK_AND_ASSIGN(stream_fs,
+                         arrow::fs::FileSystemFromUri(stream_path, &stream_file_name));
 
-    parquet::ArrowReaderProperties properties(true);
-    properties.set_batch_size(4096);
-    auto pool = arrow::default_memory_pool();
+    arrow::fs::FileSelector build_1_dataset_dir_selector;
+    build_1_dataset_dir_selector.base_dir = build_1_file_name;
+    auto build_1_file_infos =
+        build_1_fs->GetFileInfo(build_1_dataset_dir_selector).ValueOrDie();
+    for (const auto& file_info : build_1_file_infos) {
+      auto file = build_1_fs->OpenInputFile(file_info.path()).ValueOrDie();
+      build_1_files.push_back(file);
+    }
+
+    arrow::fs::FileSelector build_2_dataset_dir_selector;
+    build_2_dataset_dir_selector.base_dir = build_2_file_name;
+    auto build_2_file_infos =
+        build_2_fs->GetFileInfo(build_2_dataset_dir_selector).ValueOrDie();
+    for (const auto& file_info : build_2_file_infos) {
+      auto file = build_2_fs->OpenInputFile(file_info.path()).ValueOrDie();
+      build_2_files.push_back(file);
+    }
+
+    arrow::fs::FileSelector build_3_dataset_dir_selector;
+    build_3_dataset_dir_selector.base_dir = build_3_file_name;
+    auto build_3_file_infos =
+        build_3_fs->GetFileInfo(build_3_dataset_dir_selector).ValueOrDie();
+    for (const auto& file_info : build_3_file_infos) {
+      auto file = build_3_fs->OpenInputFile(file_info.path()).ValueOrDie();
+      build_3_files.push_back(file);
+    }
+
+    arrow::fs::FileSelector stream_dataset_dir_selector;
+    stream_dataset_dir_selector.base_dir = stream_file_name;
+    auto stream_file_infos =
+        stream_fs->GetFileInfo(stream_dataset_dir_selector).ValueOrDie();
+    for (const auto& file_info : stream_file_infos) {
+      auto file = stream_fs->OpenInputFile(file_info.path()).ValueOrDie();
+      stream_files.push_back(file);
+    }
+
+    properties.set_batch_size(10240);
+    pool = arrow::default_memory_pool();
 
     ASSERT_NOT_OK(::parquet::arrow::FileReader::Make(
-        pool, ::parquet::ParquetFileReader::Open(left_file), properties,
-        &left_parquet_reader));
-    ASSERT_NOT_OK(left_parquet_reader->GetRecordBatchReader({0}, {0, 1, 2},
-                                                            &left_record_batch_reader));
+        pool, ::parquet::ParquetFileReader::Open(build_1_files[0]), properties,
+        &build_1_parquet_reader));
+    ASSERT_NOT_OK(build_1_parquet_reader->GetRecordBatchReader(
+        {0}, {0, 3}, &build_1_record_batch_reader));
 
     ASSERT_NOT_OK(::parquet::arrow::FileReader::Make(
-        pool, ::parquet::ParquetFileReader::Open(right_file), properties,
-        &right_parquet_reader));
-    ASSERT_NOT_OK(right_parquet_reader->GetRecordBatchReader({0}, {0, 1},
-                                                             &right_record_batch_reader));
+        pool, ::parquet::ParquetFileReader::Open(build_2_files[0]), properties,
+        &build_2_parquet_reader));
+    ASSERT_NOT_OK(build_2_parquet_reader->GetRecordBatchReader(
+        {0}, {0, 2}, &build_2_record_batch_reader));
 
-    left_schema = left_record_batch_reader->schema();
-    right_schema = right_record_batch_reader->schema();
-    std::cout << left_schema->ToString() << std::endl;
-    std::cout << right_schema->ToString() << std::endl;
+    ASSERT_NOT_OK(::parquet::arrow::FileReader::Make(
+        pool, ::parquet::ParquetFileReader::Open(build_3_files[0]), properties,
+        &build_3_parquet_reader));
+    ASSERT_NOT_OK(build_3_parquet_reader->GetRecordBatchReader(
+        {0}, {0, 1}, &build_3_record_batch_reader));
 
-    ////////////////// expr prepration ////////////////
-    left_field_list = left_record_batch_reader->schema()->fields();
-    right_field_list = right_record_batch_reader->schema()->fields();
+    ASSERT_NOT_OK(::parquet::arrow::FileReader::Make(
+        pool, ::parquet::ParquetFileReader::Open(stream_files[0]), properties,
+        &stream_parquet_reader));
+    ASSERT_NOT_OK(stream_parquet_reader->GetRecordBatchReader(
+        {0}, {0, 1, 3}, &stream_record_batch_reader));
   }
 
  protected:
-  std::shared_ptr<arrow::io::RandomAccessFile> left_file;
-  std::shared_ptr<arrow::io::RandomAccessFile> right_file;
-  std::unique_ptr<::parquet::arrow::FileReader> left_parquet_reader;
-  std::unique_ptr<::parquet::arrow::FileReader> right_parquet_reader;
-  std::shared_ptr<RecordBatchReader> left_record_batch_reader;
-  std::shared_ptr<RecordBatchReader> right_record_batch_reader;
-  std::shared_ptr<arrow::Schema> left_schema;
-  std::shared_ptr<arrow::Schema> right_schema;
+  std::vector<std::shared_ptr<arrow::io::RandomAccessFile>> build_1_files;
+  std::vector<std::shared_ptr<arrow::io::RandomAccessFile>> build_2_files;
+  std::vector<std::shared_ptr<arrow::io::RandomAccessFile>> build_3_files;
+  std::vector<std::shared_ptr<arrow::io::RandomAccessFile>> stream_files;
+  std::unique_ptr<::parquet::arrow::FileReader> build_1_parquet_reader;
+  std::unique_ptr<::parquet::arrow::FileReader> build_2_parquet_reader;
+  std::unique_ptr<::parquet::arrow::FileReader> build_3_parquet_reader;
+  std::unique_ptr<::parquet::arrow::FileReader> stream_parquet_reader;
+  std::shared_ptr<RecordBatchReader> build_1_record_batch_reader;
+  std::shared_ptr<RecordBatchReader> build_2_record_batch_reader;
+  std::shared_ptr<RecordBatchReader> build_3_record_batch_reader;
+  std::shared_ptr<RecordBatchReader> stream_record_batch_reader;
 
-  std::vector<std::shared_ptr<::arrow::Field>> left_field_list;
-  std::vector<std::shared_ptr<::arrow::Field>> right_field_list;
   std::vector<std::shared_ptr<::gandiva::Expression>> expr_vector;
   std::vector<std::shared_ptr<::arrow::Field>> ret_field_list;
 
-  int left_primary_key_index = 0;
-  int right_primary_key_index = 0;
+  parquet::ArrowReaderProperties properties;
+  arrow::MemoryPool* pool;
 };
 
 TEST_F(BenchmarkArrowComputeWSCG, JoinBenchmark) {
-  // prepare expression
-  std::vector<std::shared_ptr<::gandiva::Node>> left_field_node_list;
-  for (auto field : left_field_list) {
-    left_field_node_list.push_back(TreeExprBuilder::MakeField(field));
-  }
+  int left_primary_key_index = 0;
+  int right_primary_key_index = 0;
+
+  auto build_1_schema = build_1_record_batch_reader->schema();
+  auto build_2_schema = build_2_record_batch_reader->schema();
+  auto build_3_schema = build_3_record_batch_reader->schema();
+  auto stream_schema = stream_record_batch_reader->schema();
+
+  auto build_1_field_list = build_1_record_batch_reader->schema()->fields();
+  auto build_2_field_list = build_2_record_batch_reader->schema()->fields();
+  auto build_3_field_list = build_3_record_batch_reader->schema()->fields();
+  auto stream_field_list = stream_record_batch_reader->schema()->fields();
 
   // prepare expression
-  std::vector<std::shared_ptr<::gandiva::Node>> right_field_node_list;
-  for (auto field : right_field_list) {
-    right_field_node_list.push_back(TreeExprBuilder::MakeField(field));
-  }
-
-  auto indices_type = std::make_shared<FixedSizeBinaryType>(4);
-  auto f_indices = field("indices", indices_type);
-
-  auto n_left = TreeExprBuilder::MakeFunction("codegen_left_schema", left_field_node_list,
-                                              uint32());
-  auto n_right = TreeExprBuilder::MakeFunction("codegen_right_schema",
-                                               right_field_node_list, uint32());
-  auto n_left_key = TreeExprBuilder::MakeFunction(
-      "codegen_left_schema", {left_field_node_list[left_primary_key_index]}, uint32());
-  auto n_right_key = TreeExprBuilder::MakeFunction(
-      "codegen_right_schema", {right_field_node_list[right_primary_key_index]}, uint32());
-  auto f_res = field("res", uint32());
-
-  auto schema_table_0 = arrow::schema(left_field_list);
-  auto schema_table_1 = arrow::schema(right_field_list);
-  std::vector<std::shared_ptr<Field>> field_list(left_field_list.size() +
-                                                 right_field_list.size());
-  std::merge(left_field_list.begin(), left_field_list.end(), right_field_list.begin(),
-             right_field_list.end(), field_list.begin());
-  auto schema_table = arrow::schema(field_list);
-
-  ::gandiva::NodeVector result_node_list;
-  for (auto field : field_list) {
-    result_node_list.push_back(TreeExprBuilder::MakeField(field));
-  }
-  auto n_result = TreeExprBuilder::MakeFunction("result", result_node_list, uint32());
   auto n_hash_config = TreeExprBuilder::MakeFunction(
       "build_keys_config_node", {TreeExprBuilder::MakeLiteral((int)1)}, uint32());
-
-  auto n_probeArrays = TreeExprBuilder::MakeFunction(
-      "conditionedProbeArraysInner",
-      {n_left, n_right, n_left_key, n_right_key, n_result, n_hash_config}, uint32());
-  auto n_child_probe = TreeExprBuilder::MakeFunction("child", {n_probeArrays}, uint32());
-  auto n_wscg =
-      TreeExprBuilder::MakeFunction("wholestagecodegen", {n_child_probe}, uint32());
-  auto probeArrays_expr = TreeExprBuilder::MakeExpression(n_wscg, f_res);
-
-  auto n_hash_kernel = TreeExprBuilder::MakeFunction(
-      "HashRelation", {n_left_key, n_hash_config}, uint32());
-  auto n_hash = TreeExprBuilder::MakeFunction("standalone", {n_hash_kernel}, uint32());
-  auto hashRelation_expr = TreeExprBuilder::MakeExpression(n_hash, f_res);
-  std::shared_ptr<CodeGenerator> expr_build;
-  ASSERT_NOT_OK(
-      CreateCodeGenerator(schema_table_0, {hashRelation_expr}, {}, &expr_build, true));
-  std::shared_ptr<CodeGenerator> expr_probe;
-  ASSERT_NOT_OK(CreateCodeGenerator(schema_table_1, {probeArrays_expr}, field_list,
-                                    &expr_probe, true));
-
-  ///////////////////// Calculation //////////////////
-  std::vector<std::shared_ptr<arrow::RecordBatch>> dummy_result_batches;
-  std::shared_ptr<ResultIteratorBase> build_result_iterator;
-  std::shared_ptr<ResultIteratorBase> probe_result_iterator_base;
-
-  ////////////////////// evaluate //////////////////////
-  std::shared_ptr<arrow::RecordBatch> left_record_batch;
-  std::shared_ptr<arrow::RecordBatch> right_record_batch;
-  uint64_t elapse_gen = 0;
-  uint64_t elapse_left_read = 0;
-  uint64_t elapse_right_read = 0;
-  uint64_t elapse_eval = 0;
-  uint64_t elapse_finish = 0;
-  uint64_t elapse_probe_process = 0;
-  uint64_t elapse_shuffle_process = 0;
-  uint64_t num_batches = 0;
-  uint64_t num_rows = 0;
-
-  do {
-    TIME_MICRO_OR_THROW(elapse_left_read,
-                        left_record_batch_reader->ReadNext(&left_record_batch));
-    if (left_record_batch) {
-      TIME_MICRO_OR_THROW(elapse_eval,
-                          expr_build->evaluate(left_record_batch, &dummy_result_batches));
-      num_batches += 1;
-    }
-  } while (left_record_batch);
-  std::cout << "Readed left table with " << num_batches << " batches." << std::endl;
-
-  TIME_MICRO_OR_THROW(elapse_finish, expr_build->finish(&build_result_iterator));
-  TIME_MICRO_OR_THROW(elapse_finish, expr_probe->finish(&probe_result_iterator_base));
-  auto probe_result_iterator =
-      std::dynamic_pointer_cast<ResultIterator<arrow::RecordBatch>>(
-          probe_result_iterator_base);
-
-  probe_result_iterator->SetDependencies({build_result_iterator});
-  num_batches = 0;
-  uint64_t num_output_batches = 0;
-  std::shared_ptr<arrow::RecordBatch> out;
-  do {
-    TIME_MICRO_OR_THROW(elapse_right_read,
-                        right_record_batch_reader->ReadNext(&right_record_batch));
-    if (right_record_batch) {
-      std::vector<std::shared_ptr<arrow::Array>> right_column_vector;
-      for (int i = 0; i < right_record_batch->num_columns(); i++) {
-        right_column_vector.push_back(right_record_batch->column(i));
-      }
-      TIME_MICRO_OR_THROW(elapse_probe_process,
-                          probe_result_iterator->Process(right_column_vector, &out));
-      num_batches += 1;
-      num_output_batches++;
-      num_rows += out->num_rows();
-    }
-  } while (right_record_batch);
-  std::cout << "Readed right table with " << num_batches << " batches." << std::endl;
-
-  std::cout << "=========================================="
-            << "\nBenchmarkArrowComputeWSCG processed " << num_batches << " batches"
-            << "\noutput " << num_output_batches << " batches with " << num_rows
-            << " rows"
-            << "\nCodeGen took " << TIME_TO_STRING(elapse_gen)
-            << "\nLeft Batch Read took " << TIME_TO_STRING(elapse_left_read)
-            << "\nRight Batch Read took " << TIME_TO_STRING(elapse_right_read)
-            << "\nLeft Table Hash Insert took " << TIME_TO_STRING(elapse_eval)
-            << "\nMake Result Iterator took " << TIME_TO_STRING(elapse_finish)
-            << "\nProbe and Shuffle took " << TIME_TO_STRING(elapse_probe_process) << "\n"
-            << "===========================================" << std::endl;
-}
-
-TEST_F(BenchmarkArrowComputeWSCG, MultipleJoinBenchmark) {
-  // prepare expression
-  std::vector<std::shared_ptr<::gandiva::Node>> left_field_node_list;
-  for (auto field : left_field_list) {
-    left_field_node_list.push_back(TreeExprBuilder::MakeField(field));
-  }
-
-  // prepare expression
-  std::vector<std::shared_ptr<::gandiva::Node>> right_field_node_list;
-  for (auto field : right_field_list) {
-    right_field_node_list.push_back(TreeExprBuilder::MakeField(field));
-  }
-
-  auto indices_type = std::make_shared<FixedSizeBinaryType>(4);
-  auto f_indices = field("indices", indices_type);
-
-  auto n_left = TreeExprBuilder::MakeFunction("codegen_left_schema", left_field_node_list,
-                                              uint32());
-  auto n_right = TreeExprBuilder::MakeFunction("codegen_right_schema",
-                                               right_field_node_list, uint32());
-  auto n_left_key = TreeExprBuilder::MakeFunction(
-      "codegen_left_schema", {left_field_node_list[left_primary_key_index]}, uint32());
-  auto n_right_key = TreeExprBuilder::MakeFunction(
-      "codegen_right_schema", {right_field_node_list[right_primary_key_index]}, uint32());
   auto f_res = field("res", uint32());
 
-  auto schema_table_0 = arrow::schema(left_field_list);
-  auto schema_table_1 = arrow::schema(right_field_list);
-  std::vector<std::shared_ptr<Field>> field_list(left_field_list.size() +
-                                                 right_field_list.size());
-  std::merge(left_field_list.begin(), left_field_list.end(), right_field_list.begin(),
-             right_field_list.end(), field_list.begin());
-  auto schema_table = arrow::schema(field_list);
-
-  ::gandiva::NodeVector result_node_list;
-  for (auto field : field_list) {
-    result_node_list.push_back(TreeExprBuilder::MakeField(field));
+  std::vector<std::shared_ptr<::gandiva::Node>> build_1_field_node_list;
+  for (auto field : build_1_field_list) {
+    build_1_field_node_list.push_back(TreeExprBuilder::MakeField(field));
   }
-  auto n_result = TreeExprBuilder::MakeFunction("result", result_node_list, uint32());
-  auto n_condition = TreeExprBuilder::MakeFunction(
-      "greater_than", {left_field_node_list[1], right_field_node_list[1]},
-      arrow::boolean());
-  auto n_hash_config = TreeExprBuilder::MakeFunction(
-      "build_keys_config_node", {TreeExprBuilder::MakeLiteral((int)1)}, uint32());
-  auto n_probeArrays = TreeExprBuilder::MakeFunction(
-      "conditionedProbeArraysAnti",
-      {n_left, n_right, n_left_key, n_right_key, n_result, n_hash_config, n_condition},
+  auto n_build_1 = TreeExprBuilder::MakeFunction(
+      "codegen_left_schema", {build_1_field_node_list[left_primary_key_index]}, uint32());
+
+  auto n_hash_relation_1_kernel = TreeExprBuilder::MakeFunction(
+      "standalone",
+      {TreeExprBuilder::MakeFunction("HashRelation", {n_build_1, n_hash_config},
+                                     uint32())},
       uint32());
-  auto n_child_probe = TreeExprBuilder::MakeFunction("child", {n_probeArrays}, uint32());
-
-  auto n_probeArrays_1 = TreeExprBuilder::MakeFunction(
-      "conditionedProbeArraysAnti",
-      {n_left, n_right, n_left_key, n_right_key, n_result, n_hash_config, n_condition},
-      uint32());
-  auto n_child_probe_1 =
-      TreeExprBuilder::MakeFunction("child", {n_probeArrays_1, n_child_probe}, uint32());
-
-  auto n_wscg =
-      TreeExprBuilder::MakeFunction("wholestagecodegen", {n_child_probe_1}, uint32());
-  auto probeArrays_expr = TreeExprBuilder::MakeExpression(n_wscg, f_res);
-
-  auto n_hash_kernel = TreeExprBuilder::MakeFunction(
-      "HashRelation", {n_left_key, n_hash_config}, uint32());
-  auto n_hash = TreeExprBuilder::MakeFunction("standalone", {n_hash_kernel}, uint32());
-  auto hashRelation_expr = TreeExprBuilder::MakeExpression(n_hash, f_res);
-  std::shared_ptr<CodeGenerator> expr_build_0;
-  ASSERT_NOT_OK(
-      CreateCodeGenerator(schema_table_0, {hashRelation_expr}, {}, &expr_build_0, true));
+  auto hashRelation_1_expr =
+      TreeExprBuilder::MakeExpression(n_hash_relation_1_kernel, f_res);
+  std::cout << hashRelation_1_expr->ToString() << std::endl;
   std::shared_ptr<CodeGenerator> expr_build_1;
-  ASSERT_NOT_OK(
-      CreateCodeGenerator(schema_table_0, {hashRelation_expr}, {}, &expr_build_1, true));
+  ASSERT_NOT_OK(CreateCodeGenerator(build_1_schema, {hashRelation_1_expr}, {},
+                                    &expr_build_1, true));
+  //////////////////////////////////////////////////////////////
+
+  std::vector<std::shared_ptr<::gandiva::Node>> build_2_field_node_list;
+  for (auto field : build_2_field_list) {
+    build_2_field_node_list.push_back(TreeExprBuilder::MakeField(field));
+  }
+  auto n_build_2 = TreeExprBuilder::MakeFunction(
+      "codegen_left_schema", {build_2_field_node_list[left_primary_key_index]}, uint32());
+
+  auto n_hash_relation_2_kernel = TreeExprBuilder::MakeFunction(
+      "standalone",
+      {TreeExprBuilder::MakeFunction("HashRelation", {n_build_2, n_hash_config},
+                                     uint32())},
+      uint32());
+  auto hashRelation_2_expr =
+      TreeExprBuilder::MakeExpression(n_hash_relation_2_kernel, f_res);
+  std::cout << hashRelation_2_expr->ToString() << std::endl;
+  std::shared_ptr<CodeGenerator> expr_build_2;
+  ASSERT_NOT_OK(CreateCodeGenerator(build_2_schema, {hashRelation_2_expr}, {},
+                                    &expr_build_2, true));
+  //////////////////////////////////////////////////////////////
+
+  std::vector<std::shared_ptr<::gandiva::Node>> build_3_field_node_list;
+  for (auto field : build_3_field_list) {
+    build_3_field_node_list.push_back(TreeExprBuilder::MakeField(field));
+  }
+  auto n_build_3 = TreeExprBuilder::MakeFunction(
+      "codegen_left_schema", {build_3_field_node_list[left_primary_key_index]}, uint32());
+
+  auto n_hash_relation_3_kernel = TreeExprBuilder::MakeFunction(
+      "standalone",
+      {TreeExprBuilder::MakeFunction("HashRelation", {n_build_3, n_hash_config},
+                                     uint32())},
+      uint32());
+  auto hashRelation_3_expr =
+      TreeExprBuilder::MakeExpression(n_hash_relation_3_kernel, f_res);
+  std::cout << hashRelation_3_expr->ToString() << std::endl;
+  std::shared_ptr<CodeGenerator> expr_build_3;
+  ASSERT_NOT_OK(CreateCodeGenerator(build_3_schema, {hashRelation_3_expr}, {},
+                                    &expr_build_3, true));
+  //////////////////////////////////////////////////////////////
+
+  // prepare expression
+  std::vector<std::shared_ptr<::gandiva::Node>> stream_field_node_list;
+  for (auto field : stream_field_list) {
+    stream_field_node_list.push_back(TreeExprBuilder::MakeField(field));
+  }
+
+  //////////////////////////////////////////////////////////////
+  auto n_join_1_build = TreeExprBuilder::MakeFunction("codegen_right_schema",
+                                                      build_1_field_node_list, uint32());
+  auto n_join_1_stream = TreeExprBuilder::MakeFunction("codegen_right_schema",
+                                                       stream_field_node_list, uint32());
+  auto n_join_1_build_key = TreeExprBuilder::MakeFunction(
+      "codegen_left_schema", {build_1_field_node_list[left_primary_key_index]}, uint32());
+  auto n_join_1_stream_key = TreeExprBuilder::MakeFunction(
+      "codegen_right_schema", {stream_field_node_list[right_primary_key_index]},
+      uint32());
+
+  auto join_1_res_field_list = {stream_field_list[0], stream_field_list[2],
+                                build_1_field_list[1]};
+  auto join_1_res_schema = arrow::schema(join_1_res_field_list);
+
+  ::gandiva::NodeVector join_1_result_node_list;
+  for (auto field : join_1_res_field_list) {
+    join_1_result_node_list.push_back(TreeExprBuilder::MakeField(field));
+  }
+  auto n_join_1_result =
+      TreeExprBuilder::MakeFunction("result", join_1_result_node_list, uint32());
+  auto n_join_1 = TreeExprBuilder::MakeFunction(
+      "child",
+      {TreeExprBuilder::MakeFunction(
+          "conditionedProbeArraysInner",
+          {n_join_1_build, n_join_1_stream, n_join_1_build_key, n_join_1_stream_key,
+           n_join_1_result, n_hash_config},
+          uint32())},
+      uint32());
+
+  //////////////////////////////////////////////////////////////
+
+  auto n_join_2_build = TreeExprBuilder::MakeFunction("codegen_right_schema",
+                                                      build_2_field_node_list, uint32());
+  auto n_join_2_stream = TreeExprBuilder::MakeFunction("codegen_right_schema",
+                                                       join_1_result_node_list, uint32());
+  auto n_join_2_build_key = TreeExprBuilder::MakeFunction(
+      "codegen_left_schema", {build_2_field_node_list[left_primary_key_index]}, uint32());
+  auto n_join_2_stream_key = TreeExprBuilder::MakeFunction(
+      "codegen_right_schema", {join_1_result_node_list[2]}, uint32());
+
+  auto join_2_res_field_list = {stream_field_list[0], stream_field_list[2],
+                                build_2_field_list[1]};
+  auto join_2_res_schema = arrow::schema(join_2_res_field_list);
+
+  ::gandiva::NodeVector join_2_result_node_list;
+  for (auto field : join_2_res_field_list) {
+    join_2_result_node_list.push_back(TreeExprBuilder::MakeField(field));
+  }
+  auto n_join_2_result =
+      TreeExprBuilder::MakeFunction("result", join_2_result_node_list, uint32());
+  auto n_join_2 = TreeExprBuilder::MakeFunction(
+      "child",
+      {TreeExprBuilder::MakeFunction(
+           "conditionedProbeArraysInner",
+           {n_join_2_build, n_join_2_stream, n_join_2_build_key, n_join_2_stream_key,
+            n_join_2_result, n_hash_config},
+           uint32()),
+       n_join_1},
+      uint32());
+
+  //////////////////////////////////////////////////////////////
+  auto n_join_3_build = TreeExprBuilder::MakeFunction("codegen_right_schema",
+                                                      build_3_field_node_list, uint32());
+  auto n_join_3_stream = TreeExprBuilder::MakeFunction("codegen_right_schema",
+                                                       join_2_result_node_list, uint32());
+  auto n_join_3_build_key = TreeExprBuilder::MakeFunction(
+      "codegen_left_schema", {build_3_field_node_list[left_primary_key_index]}, uint32());
+  auto n_join_3_stream_key = TreeExprBuilder::MakeFunction(
+      "codegen_right_schema", {join_2_result_node_list[2]}, uint32());
+
+  auto join_3_res_field_list = {stream_field_list[0], stream_field_list[2]};
+  auto join_3_res_schema = arrow::schema(join_3_res_field_list);
+
+  ::gandiva::NodeVector join_3_result_node_list;
+  for (auto field : join_3_res_field_list) {
+    join_3_result_node_list.push_back(TreeExprBuilder::MakeField(field));
+  }
+  auto n_join_3_result =
+      TreeExprBuilder::MakeFunction("result", join_3_result_node_list, uint32());
+  auto n_join_3 = TreeExprBuilder::MakeFunction(
+      "child",
+      {TreeExprBuilder::MakeFunction(
+           "conditionedProbeArraysInner",
+           {n_join_3_build, n_join_3_stream, n_join_3_build_key, n_join_3_stream_key,
+            n_join_3_result, n_hash_config},
+           uint32()),
+       n_join_2},
+      uint32());
+
+  //////////////////////////////////////////////////////////////
+
+  auto n_wscg = TreeExprBuilder::MakeFunction("wholestagecodegen", {n_join_3}, uint32());
+
+  auto probeArrays_expr = TreeExprBuilder::MakeExpression(n_wscg, f_res);
+  std::cout << probeArrays_expr->ToString() << std::endl;
+
   std::shared_ptr<CodeGenerator> expr_probe;
-  ASSERT_NOT_OK(CreateCodeGenerator(schema_table_1, {probeArrays_expr}, field_list,
-                                    &expr_probe, true));
+  ASSERT_NOT_OK(CreateCodeGenerator(stream_schema, {probeArrays_expr},
+                                    join_3_res_field_list, &expr_probe, true));
 
   ///////////////////// Calculation //////////////////
   std::vector<std::shared_ptr<arrow::RecordBatch>> dummy_result_batches;
-  std::shared_ptr<ResultIteratorBase> build_result_iterator_0;
   std::shared_ptr<ResultIteratorBase> build_result_iterator_1;
+  std::shared_ptr<ResultIteratorBase> build_result_iterator_2;
+  std::shared_ptr<ResultIteratorBase> build_result_iterator_3;
   std::shared_ptr<ResultIteratorBase> probe_result_iterator_base;
 
   ////////////////////// evaluate //////////////////////
-  std::shared_ptr<arrow::RecordBatch> left_record_batch;
-  std::shared_ptr<arrow::RecordBatch> right_record_batch;
+  std::shared_ptr<arrow::RecordBatch> build_1_record_batch;
+  std::shared_ptr<arrow::RecordBatch> build_2_record_batch;
+  std::shared_ptr<arrow::RecordBatch> build_3_record_batch;
+  std::shared_ptr<arrow::RecordBatch> stream_record_batch;
   uint64_t elapse_gen = 0;
   uint64_t elapse_left_read = 0;
   uint64_t elapse_right_read = 0;
@@ -332,52 +362,122 @@ TEST_F(BenchmarkArrowComputeWSCG, MultipleJoinBenchmark) {
   uint64_t elapse_shuffle_process = 0;
   uint64_t num_batches = 0;
   uint64_t num_rows = 0;
+  int build_1_reader_index = 1;
+  int build_2_reader_index = 1;
+  int build_3_reader_index = 1;
+  int stream_reader_index = 1;
 
-  do {
-    TIME_MICRO_OR_THROW(elapse_left_read,
-                        left_record_batch_reader->ReadNext(&left_record_batch));
-    if (left_record_batch) {
-      TIME_MICRO_OR_THROW(
-          elapse_eval, expr_build_0->evaluate(left_record_batch, &dummy_result_batches));
-      TIME_MICRO_OR_THROW(
-          elapse_eval, expr_build_1->evaluate(left_record_batch, &dummy_result_batches));
-      num_batches += 1;
-    }
-  } while (left_record_batch);
-  std::cout << "Readed left table with " << num_batches << " batches." << std::endl;
-
-  TIME_MICRO_OR_THROW(elapse_finish, expr_build_0->finish(&build_result_iterator_0));
-  TIME_MICRO_OR_THROW(elapse_finish, expr_build_1->finish(&build_result_iterator_1));
   TIME_MICRO_OR_THROW(elapse_finish, expr_probe->finish(&probe_result_iterator_base));
   auto probe_result_iterator =
       std::dynamic_pointer_cast<ResultIterator<arrow::RecordBatch>>(
           probe_result_iterator_base);
+
+  do {
+    do {
+      TIME_MICRO_OR_THROW(elapse_left_read,
+                          build_1_record_batch_reader->ReadNext(&build_1_record_batch));
+      if (build_1_record_batch) {
+        TIME_MICRO_OR_THROW(elapse_eval, expr_build_1->evaluate(build_1_record_batch,
+                                                                &dummy_result_batches));
+        num_batches += 1;
+        num_rows += build_1_record_batch->num_rows();
+      }
+    } while (build_1_record_batch);
+    // if (++build_1_reader_index < build_1_files.size()) {
+    if (++build_1_reader_index < 150) {
+      ASSERT_NOT_OK(::parquet::arrow::FileReader::Make(
+          pool, ::parquet::ParquetFileReader::Open(build_1_files[build_1_reader_index]),
+          properties, &build_1_parquet_reader));
+      ASSERT_NOT_OK(build_1_parquet_reader->GetRecordBatchReader(
+          {0}, {0, 3}, &build_1_record_batch_reader));
+    }
+  } while (build_1_reader_index < 150);
+  TIME_MICRO_OR_THROW(elapse_finish, expr_build_1->finish(&build_result_iterator_1));
+
+  do {
+    do {
+      TIME_MICRO_OR_THROW(elapse_left_read,
+                          build_2_record_batch_reader->ReadNext(&build_2_record_batch));
+      if (build_2_record_batch) {
+        TIME_MICRO_OR_THROW(elapse_eval, expr_build_2->evaluate(build_2_record_batch,
+                                                                &dummy_result_batches));
+        num_batches += 1;
+        num_rows += build_2_record_batch->num_rows();
+      }
+    } while (build_2_record_batch);
+    if (++build_2_reader_index < build_2_files.size()) {
+      ASSERT_NOT_OK(::parquet::arrow::FileReader::Make(
+          pool, ::parquet::ParquetFileReader::Open(build_2_files[build_2_reader_index]),
+          properties, &build_2_parquet_reader));
+      ASSERT_NOT_OK(build_2_parquet_reader->GetRecordBatchReader(
+          {0}, {0, 2}, &build_2_record_batch_reader));
+    }
+  } while (build_2_reader_index < build_2_files.size());
+  TIME_MICRO_OR_THROW(elapse_finish, expr_build_2->finish(&build_result_iterator_2));
+
+  do {
+    do {
+      TIME_MICRO_OR_THROW(elapse_left_read,
+                          build_3_record_batch_reader->ReadNext(&build_3_record_batch));
+      if (build_3_record_batch) {
+        TIME_MICRO_OR_THROW(elapse_eval, expr_build_3->evaluate(build_3_record_batch,
+                                                                &dummy_result_batches));
+        num_batches += 1;
+        num_rows += build_3_record_batch->num_rows();
+      }
+    } while (build_3_record_batch);
+    if (++build_3_reader_index < build_3_files.size()) {
+      ASSERT_NOT_OK(::parquet::arrow::FileReader::Make(
+          pool, ::parquet::ParquetFileReader::Open(build_3_files[build_3_reader_index]),
+          properties, &build_3_parquet_reader));
+      ASSERT_NOT_OK(build_3_parquet_reader->GetRecordBatchReader(
+          {0}, {0, 1}, &build_3_record_batch_reader));
+    }
+  } while (build_3_reader_index < build_3_files.size());
+  TIME_MICRO_OR_THROW(elapse_finish, expr_build_3->finish(&build_result_iterator_3));
 
   probe_result_iterator->SetDependencies(
-      {build_result_iterator_0, build_result_iterator_1});
+      {build_result_iterator_1, build_result_iterator_2, build_result_iterator_3});
+
+  std::cout << "Loaded all build side tables, total numRows is " << num_rows
+            << ", start to Join" << std::endl;
   num_batches = 0;
+  num_rows = 0;
+  uint64_t out_num_rows = 0;
   uint64_t num_output_batches = 0;
   std::shared_ptr<arrow::RecordBatch> out;
   do {
-    TIME_MICRO_OR_THROW(elapse_right_read,
-                        right_record_batch_reader->ReadNext(&right_record_batch));
-    if (right_record_batch) {
-      std::vector<std::shared_ptr<arrow::Array>> right_column_vector;
-      for (int i = 0; i < right_record_batch->num_columns(); i++) {
-        right_column_vector.push_back(right_record_batch->column(i));
+    do {
+      TIME_MICRO_OR_THROW(elapse_right_read,
+                          stream_record_batch_reader->ReadNext(&stream_record_batch));
+      if (stream_record_batch) {
+        std::vector<std::shared_ptr<arrow::Array>> stream_column_vector;
+        for (int i = 0; i < stream_record_batch->num_columns(); i++) {
+          stream_column_vector.push_back(stream_record_batch->column(i));
+        }
+        TIME_MICRO_OR_THROW(elapse_probe_process,
+                            probe_result_iterator->Process(stream_column_vector, &out));
+        num_batches += 1;
+        num_rows += stream_record_batch->num_rows();
+        num_output_batches++;
+        out_num_rows += out->num_rows();
       }
-      TIME_MICRO_OR_THROW(elapse_probe_process,
-                          probe_result_iterator->Process(right_column_vector, &out));
-      num_batches += 1;
-      num_output_batches++;
-      num_rows += out->num_rows();
+    } while (stream_record_batch);
+    // if (++stream_reader_index < stream_files.size()) {
+    if (++stream_reader_index < 150) {
+      ASSERT_NOT_OK(::parquet::arrow::FileReader::Make(
+          pool, ::parquet::ParquetFileReader::Open(stream_files[stream_reader_index]),
+          properties, &stream_parquet_reader));
+      ASSERT_NOT_OK(stream_parquet_reader->GetRecordBatchReader(
+          {0}, {0, 1, 3}, &stream_record_batch_reader));
     }
-  } while (right_record_batch);
-  std::cout << "Readed right table with " << num_batches << " batches." << std::endl;
+  } while (stream_reader_index < 150);
+  std::cout << "Readed right table with " << num_batches << " batches from " << 150
+            << " files." << std::endl;
 
   std::cout << "=========================================="
-            << "\nBenchmarkArrowComputeWSCG processed " << num_batches << " batches"
-            << "\noutput " << num_output_batches << " batches with " << num_rows
+            << "\nBenchmarkArrowComputeWSCG processed " << num_rows << " rows"
+            << "\noutput " << num_output_batches << " batches with " << out_num_rows
             << " rows"
             << "\nCodeGen took " << TIME_TO_STRING(elapse_gen)
             << "\nLeft Batch Read took " << TIME_TO_STRING(elapse_left_read)
