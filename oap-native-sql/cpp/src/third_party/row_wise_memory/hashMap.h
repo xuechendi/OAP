@@ -274,10 +274,8 @@ static inline int safeLookup(unsafeHashMap* hashMap, CType keyRow, int hashVal) 
   int mask = hashMap->arrayCapacity - 1;
   int pos = hashVal & mask;
   int step = 1;
-  int keyLength = sizeof(keyRow);
-  char* base = hashMap->bytesMap;
   int sub_step = 2;
-  int64_t* keyArrayBaseInt = (int64_t*)hashMap->keyArray;
+  auto keyArrayBaseInt = (const int64_t*)hashMap->keyArray;
   int keySizeInBytes = hashMap->bytesInKeyArray;
   char* keyArrayBase = hashMap->keyArray;
 
@@ -435,7 +433,7 @@ static inline int safeLookup(unsafeHashMap* hashMap, CType keyRow, int hashVal,
   char* base = hashMap->bytesMap;
 
   int sub_step = 2;
-  int64_t* keyArrayBaseInt = (int64_t*)hashMap->keyArray;
+  auto keyArrayBaseInt = (const int64_t*)hashMap->keyArray;
   int keySizeInBytes = hashMap->bytesInKeyArray;
   char* keyArrayBase = hashMap->keyArray;
 
