@@ -267,7 +267,45 @@ static inline bool growAndRehashKeyArray(unsafeHashMap* hashMap) {
  *   0 if exists
  *   -1 if not exists
  */
-template <typename CType>
+template <typename CType,
+          typename std::enable_if_t<std::is_same<CType, int64_t>::value>* = nullptr>
+static inline int safeLookup(unsafeHashMap* hashMap, CType keyRow, int hashVal) {
+  assert(hashMap->keyArray != NULL);
+  int mask = hashMap->arrayCapacity - 1;
+  int pos = hashVal & mask;
+  int step = 1;
+  int keyLength = sizeof(keyRow);
+  char* base = hashMap->bytesMap;
+  int sub_step = 2;
+  int64_t* keyArrayBaseInt = (int64_t*)hashMap->keyArray;
+  int keySizeInBytes = hashMap->bytesInKeyArray;
+  char* keyArrayBase = hashMap->keyArray;
+
+  while (true) {
+    int keyHashCode = (int)(keyArrayBaseInt[pos * sub_step] >> 32);
+    int KeyAddressOffset = (int)(keyArrayBaseInt[pos * sub_step]);
+
+    if (KeyAddressOffset < 0) {
+      // This is a new key.
+      return HASH_NEW_KEY;
+    } else {
+      if (keyHashCode == hashVal) {
+        if (keyRow == keyArrayBaseInt[pos * sub_step + 1]) {
+          return 0;
+        }
+      }
+    }
+
+    pos = (pos + step) & mask;
+    step++;
+  }
+
+  // Cannot reach here
+  assert(0);
+}
+
+template <typename CType,
+          typename std::enable_if_t<!std::is_same<CType, int64_t>::value>* = nullptr>
 static inline int safeLookup(unsafeHashMap* hashMap, CType keyRow, int hashVal) {
   assert(hashMap->keyArray != NULL);
   int mask = hashMap->arrayCapacity - 1;
@@ -287,16 +325,8 @@ static inline int safeLookup(unsafeHashMap* hashMap, CType keyRow, int hashVal) 
       return HASH_NEW_KEY;
     } else {
       if ((int)keyHashCode == hashVal) {
-        if (keySizeInBytes > 8) {
-          if (keyRow == *(CType*)(keyArrayBase + pos * keySizeInBytes + 8)) {
-            return 0;
-          }
-        } else {
-          // Full hash code matches.  Let's compare the keys for equality.
-          char* record = base + KeyAddressOffset;
-          if (keyRow == *((CType*)getKeyFromBytesMap(record))) {
-            return 0;
-          }
+        if (keyRow == *(CType*)(keyArrayBase + pos * keySizeInBytes + 8)) {
+          return 0;
         }
       }
     }
@@ -389,11 +419,58 @@ static inline int safeLookup(unsafeHashMap* hashMap, std::shared_ptr<UnsafeRow> 
 }
 
 /*
- * return:
- *   0 if exists
- *   -1 if not exists
+ * Since Variable size will go safeLoopUp(const char*, size_t) function list after this
+ * one, this function won't need to handle variable scenario return: 0 if exists -1 if not
+ * exists
  */
-template <typename CType>
+template <typename CType,
+          typename std::enable_if_t<std::is_same<CType, int64_t>::value>* = nullptr>
+static inline int safeLookup(unsafeHashMap* hashMap, CType keyRow, int hashVal,
+                             std::vector<ArrayItemIndex>* output) {
+  assert(hashMap->keyArray != NULL);
+  int mask = hashMap->arrayCapacity - 1;
+  int pos = hashVal & mask;
+  int step = 1;
+  int keyLength = sizeof(keyRow);
+  char* base = hashMap->bytesMap;
+
+  int sub_step = 2;
+  int64_t* keyArrayBaseInt = (int64_t*)hashMap->keyArray;
+  int keySizeInBytes = hashMap->bytesInKeyArray;
+  char* keyArrayBase = hashMap->keyArray;
+
+  while (true) {
+    int keyHashCode = (int)(keyArrayBaseInt[pos * sub_step] >> 32);
+    int KeyAddressOffset = (int)(keyArrayBaseInt[pos * sub_step]);
+
+    if (KeyAddressOffset < 0) {
+      // This is a new key.
+      return HASH_NEW_KEY;
+    } else {
+      if ((int)keyHashCode == hashVal) {
+        if (keyRow == keyArrayBaseInt[pos * sub_step + 1]) {
+          char* record = base + KeyAddressOffset;
+          (*output).clear();
+          while (record != nullptr) {
+            (*output).push_back(*((ArrayItemIndex*)getValueFromBytesMap(record)));
+            KeyAddressOffset = getNextOffsetFromBytesMap(record);
+            record = KeyAddressOffset == 0 ? nullptr : (base + KeyAddressOffset);
+          }
+          return 0;
+        }
+      }
+    }
+
+    pos = (pos + step) & mask;
+    step++;
+  }
+
+  // Cannot reach here
+  assert(0);
+}
+
+template <typename CType,
+          typename std::enable_if_t<!std::is_same<CType, int64_t>::value>* = nullptr>
 static inline int safeLookup(unsafeHashMap* hashMap, CType keyRow, int hashVal,
                              std::vector<ArrayItemIndex>* output) {
   assert(hashMap->keyArray != NULL);
@@ -415,30 +492,15 @@ static inline int safeLookup(unsafeHashMap* hashMap, CType keyRow, int hashVal,
       return HASH_NEW_KEY;
     } else {
       if ((int)keyHashCode == hashVal) {
-        if (keySizeInBytes > 8) {
-          if (keyRow == *(CType*)(keyArrayBase + pos * keySizeInBytes + 8)) {
-            char* record = base + KeyAddressOffset;
-            (*output).clear();
-            while (record != nullptr) {
-              (*output).push_back(*((ArrayItemIndex*)getValueFromBytesMap(record)));
-              KeyAddressOffset = getNextOffsetFromBytesMap(record);
-              record = KeyAddressOffset == 0 ? nullptr : (base + KeyAddressOffset);
-            }
-            return 0;
-          }
-        } else {
-          // Full hash code matches.  Let's compare the keys for equality.
+        if (keyRow == *(CType*)(keyArrayBase + pos * keySizeInBytes + 8)) {
           char* record = base + KeyAddressOffset;
-          if (keyRow == *((CType*)getKeyFromBytesMap(record))) {
-            // there may be more than one record
-            (*output).clear();
-            while (record != nullptr) {
-              (*output).push_back(*((ArrayItemIndex*)getValueFromBytesMap(record)));
-              KeyAddressOffset = getNextOffsetFromBytesMap(record);
-              record = KeyAddressOffset == 0 ? nullptr : (base + KeyAddressOffset);
-            }
-            return 0;
+          (*output).clear();
+          while (record != nullptr) {
+            (*output).push_back(*((ArrayItemIndex*)getValueFromBytesMap(record)));
+            KeyAddressOffset = getNextOffsetFromBytesMap(record);
+            record = KeyAddressOffset == 0 ? nullptr : (base + KeyAddressOffset);
           }
+          return 0;
         }
       }
     }
@@ -460,11 +522,11 @@ static inline int safeLookup(unsafeHashMap* hashMap, const char* keyRow, size_t 
   int keyLength = keyRowLen;
   char* base = hashMap->bytesMap;
   int keySizeInBytes = hashMap->bytesInKeyArray;
-  char* keyArrayBase = hashMap->keyArray;
+  int* keyArrayBaseInt = (int*)hashMap->keyArray;
 
   while (true) {
-    int KeyAddressOffset = *(int*)(keyArrayBase + pos * keySizeInBytes);
-    int keyHashCode = *(int*)(keyArrayBase + pos * keySizeInBytes + 4);
+    int KeyAddressOffset = keyArrayBaseInt[pos * 2];
+    int keyHashCode = keyArrayBaseInt[pos * 2 + 1];
 
     if (KeyAddressOffset < 0) {
       // This is a new key.
