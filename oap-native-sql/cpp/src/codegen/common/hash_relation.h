@@ -157,14 +157,27 @@ class HashRelation {
     return arrow::Status::OK();
   }
 
-  template <typename KeyArrayType>
+  template <typename KeyArrayType,
+            typename std::enable_if_t<!std::is_same<KeyArrayType, StringArray>::value>* =
+                nullptr>
   arrow::Status AppendKeyColumn(std::shared_ptr<arrow::Array> in,
                                 std::shared_ptr<KeyArrayType> original_key) {
     // This Key should be Hash Key
     auto typed_array = std::make_shared<ArrayType>(in);
-    for (int i = 0; i < typed_array->length(); i++) {
-      RETURN_NOT_OK(
-          Insert(typed_array->GetView(i), original_key->GetView(i), num_arrays_, i));
+    if (original_key->null_count() == 0) {
+      for (int i = 0; i < typed_array->length(); i++) {
+        RETURN_NOT_OK(
+            Insert(typed_array->GetView(i), original_key->GetView(i), num_arrays_, i));
+      }
+    } else {
+      for (int i = 0; i < typed_array->length(); i++) {
+        if (original_key->IsNull(i)) {
+          RETURN_NOT_OK(InsertNull(num_arrays_, i));
+        } else {
+          RETURN_NOT_OK(
+              Insert(typed_array->GetView(i), original_key->GetView(i), num_arrays_, i));
+        }
+      }
     }
 
     num_arrays_++;
@@ -176,9 +189,22 @@ class HashRelation {
                                 std::shared_ptr<StringArray> original_key) {
     // This Key should be Hash Key
     auto typed_array = std::make_shared<ArrayType>(in);
-    for (int i = 0; i < typed_array->length(); i++) {
-      RETURN_NOT_OK(
-          Insert(typed_array->GetView(i), original_key->GetString(i), num_arrays_, i));
+    if (original_key->null_count() == 0) {
+      for (int i = 0; i < typed_array->length(); i++) {
+        auto str = original_key->GetString(i);
+        RETURN_NOT_OK(
+            Insert(typed_array->GetView(i), str.data(), str.size(), num_arrays_, i));
+      }
+    } else {
+      for (int i = 0; i < typed_array->length(); i++) {
+        if (original_key->IsNull(i)) {
+          RETURN_NOT_OK(InsertNull(num_arrays_, i));
+        } else {
+          auto str = original_key->GetString(i);
+          RETURN_NOT_OK(
+              Insert(typed_array->GetView(i), str.data(), str.size(), num_arrays_, i));
+        }
+      }
     }
 
     num_arrays_++;
@@ -291,6 +317,11 @@ class HashRelation {
 
   void TESTGrowAndRehashKeyArray() { growAndRehashKeyArray(hash_table_); }
 
+  int GetHashTableSize() {
+    assert(hash_table_ != nullptr);
+    return hash_table_->numKeys;
+  }
+
  protected:
   bool unsafe_set = false;
   uint64_t num_arrays_ = 0;
@@ -316,6 +347,17 @@ class HashRelation {
     assert(hash_table_ != nullptr);
     auto index = ArrayItemIndex(array_id, id);
     if (!append(hash_table_, payload, v, (char*)&index, sizeof(ArrayItemIndex))) {
+      return arrow::Status::CapacityError("Insert to HashMap failed.");
+    }
+    return arrow::Status::OK();
+  }
+
+  arrow::Status Insert(int32_t v, const char* payload, size_t payload_len,
+                       uint32_t array_id, uint32_t id) {
+    assert(hash_table_ != nullptr);
+    auto index = ArrayItemIndex(array_id, id);
+    if (!append(hash_table_, payload, payload_len, v, (char*)&index,
+                sizeof(ArrayItemIndex))) {
       return arrow::Status::CapacityError("Insert to HashMap failed.");
     }
     return arrow::Status::OK();

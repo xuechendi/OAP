@@ -132,12 +132,15 @@ class HashRelationKernel::Impl {
     }
   }
 
+  ~Impl() {}
+
   arrow::Status Evaluate(const ArrayList& in) {
     for (int i = 0; i < in.size(); i++) {
       RETURN_NOT_OK(hash_relation_->AppendPayloadColumn(i, in[i]));
     }
     if (builder_type_ == 2) return arrow::Status::OK();
     std::shared_ptr<arrow::Array> key_array;
+    auto status = arrow::Status::OK();
     if (builder_type_ == 0) {
       if (key_projector_) {
         arrow::ArrayVector outputs;
@@ -184,14 +187,13 @@ class HashRelationKernel::Impl {
   PROCESS(arrow::Date32Type)             \
   PROCESS(arrow::Date64Type)             \
   PROCESS(arrow::StringType)
-      if (project_outputs.size() == 1 &&
-          project_outputs[0]->type_id() != arrow::Type::STRING) {
+      if (project_outputs.size() == 1) {
         switch (project_outputs[0]->type_id()) {
 #define PROCESS(InType)                                                   \
   case TypeTraits<InType>::type_id: {                                     \
     using ArrayType = precompile::TypeTraits<InType>::ArrayType;          \
     auto typed_key_arr = std::make_shared<ArrayType>(project_outputs[0]); \
-    return hash_relation_->AppendKeyColumn(key_array, typed_key_arr);     \
+    status = hash_relation_->AppendKeyColumn(key_array, typed_key_arr);   \
   } break;
           PROCESS_SUPPORTED_TYPES(PROCESS)
 #undef PROCESS
@@ -202,6 +204,7 @@ class HashRelationKernel::Impl {
           } break;
         }
 #undef PROCESS_SUPPORTED_TYPES
+
       } else {
         /* Append key array to UnsafeArray for later UnsafeRow projection */
         std::vector<std::shared_ptr<UnsafeArray>> payloads;
@@ -211,10 +214,10 @@ class HashRelationKernel::Impl {
           RETURN_NOT_OK(MakeUnsafeArray(arr->type(), i++, arr, &payload));
           payloads.push_back(payload);
         }
-        return hash_relation_->AppendKeyColumn(key_array, payloads);
+        status = hash_relation_->AppendKeyColumn(key_array, payloads);
       }
     }
-    return arrow::Status::OK();
+    return status;
   }
 
   std::string GetSignature() { return ""; }
