@@ -140,7 +140,6 @@ class HashRelationKernel::Impl {
     }
     if (builder_type_ == 2) return arrow::Status::OK();
     std::shared_ptr<arrow::Array> key_array;
-    auto status = arrow::Status::OK();
     if (builder_type_ == 0) {
       if (key_projector_) {
         arrow::ArrayVector outputs;
@@ -193,7 +192,7 @@ class HashRelationKernel::Impl {
   case TypeTraits<InType>::type_id: {                                     \
     using ArrayType = precompile::TypeTraits<InType>::ArrayType;          \
     auto typed_key_arr = std::make_shared<ArrayType>(project_outputs[0]); \
-    status = hash_relation_->AppendKeyColumn(key_array, typed_key_arr);   \
+    return hash_relation_->AppendKeyColumn(key_array, typed_key_arr);     \
   } break;
           PROCESS_SUPPORTED_TYPES(PROCESS)
 #undef PROCESS
@@ -214,10 +213,10 @@ class HashRelationKernel::Impl {
           RETURN_NOT_OK(MakeUnsafeArray(arr->type(), i++, arr, &payload));
           payloads.push_back(payload);
         }
-        status = hash_relation_->AppendKeyColumn(key_array, payloads);
+        return hash_relation_->AppendKeyColumn(key_array, payloads);
       }
     }
-    return status;
+    return arrow::Status::OK();
   }
 
   std::string GetSignature() { return ""; }
