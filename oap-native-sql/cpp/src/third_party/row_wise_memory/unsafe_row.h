@@ -44,6 +44,12 @@ struct UnsafeRow {
     auto validity_size = (numFields / 8) + 1;
     cursor = validity_size;
   }
+  bool isNullExists() {
+    for (int i = 0; i < ((numFields / 8) + 1); i++) {
+      if (data[i] != 0) return true;
+    }
+    return false;
+  }
 };
 
 static inline int calculateBitSetWidthInBytes(int numFields) {
