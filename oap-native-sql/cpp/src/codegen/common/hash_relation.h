@@ -265,7 +265,12 @@ class HashRelation {
     return safeLookup(hash_table_, payload, v);
   }
 
-  int GetNull() { return null_index_set_ ? 0 : HASH_NEW_KEY; }
+  int GetNull() {
+    // since vanilla spark doesn't support to join with two nulls
+    // we should always return -1 here;
+    // return null_index_set_ ? 0 : HASH_NEW_KEY;
+    return HASH_NEW_KEY;
+  }
 
   arrow::Status AppendPayloadColumn(int idx, std::shared_ptr<arrow::Array> in) {
     return hash_relation_column_list_[idx]->AppendColumn(in);
@@ -364,12 +369,14 @@ class HashRelation {
   }
 
   arrow::Status InsertNull(uint32_t array_id, uint32_t id) {
-    if (!null_index_set_) {
-      null_index_set_ = true;
-      null_index_list_ = {ArrayItemIndex(array_id, id)};
-    } else {
-      null_index_list_.emplace_back(array_id, id);
-    }
+    // since vanilla spark doesn't support match null in join
+    // we can directly retun to optimize
+    // if (!null_index_set_) {
+    //  null_index_set_ = true;
+    //  null_index_list_ = {ArrayItemIndex(array_id, id)};
+    //} else {
+    //  null_index_list_.emplace_back(array_id, id);
+    //}
     return arrow::Status::OK();
   }
 };
