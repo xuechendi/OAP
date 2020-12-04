@@ -28,11 +28,11 @@ object ExecutorManager {
       val numCorePerExecutor = numaInfo.numCoresPerExecutor
       val coreRange = numaInfo.totalCoreRange
       val shouldBindNumaIdx = executorIdOnLocalNode.indexOf(executorId) % coreRange.size
-      val coreStartIdx = coreRange(shouldBindNumaIdx)._1
-      val coreEndIdx = coreRange(shouldBindNumaIdx)._2
+      //val coreStartIdx = coreRange(shouldBindNumaIdx)._1
+      //val coreEndIdx = coreRange(shouldBindNumaIdx)._2
       System.out.println(
         s"executorId is ${executorId}, executorIdOnLocalNode is ${executorIdOnLocalNode}")
-      val taskSetCmd = s"taskset -cpa ${coreStartIdx}-${coreEndIdx} ${getProcessId()}"
+      val taskSetCmd = s"taskset -cpa ${coreRange(shouldBindNumaIdx)} ${getProcessId()}"
       System.out.println(taskSetCmd)
       isTaskSet = true
       Utils.executeCommand(Seq("bash", "-c", taskSetCmd))
