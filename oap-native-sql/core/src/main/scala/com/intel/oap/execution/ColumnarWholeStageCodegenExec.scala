@@ -409,7 +409,6 @@ case class ColumnarWholeStageCodegenExec(child: SparkPlan)(val codegenStageId: I
                 return new ColumnarBatch(resultColumnVectors.map(_.asInstanceOf[ColumnVector]), 0)
               }
               val outputNumRows = output_rb.getLength
-              System.out.println(s"Get Output Batch from SMJ WSCG, nulRows is ${outputNumRows}")
               val output = ConverterUtils.fromArrowRecordBatch(resCtx.outputSchema, output_rb)
               ConverterUtils.releaseArrowRecordBatch(output_rb)
               eval_elapse += System.nanoTime() - beforeEval

@@ -70,12 +70,16 @@ class SortRelation {
     int range = 0;
     bool is_same = true;
     while (is_same) {
-      auto cur_idx = GetItemIndexWithShift(range);
-      auto cur_idx_plus_one = GetItemIndexWithShift(range + 1);
-      for (auto col : sort_relation_key_list_) {
-        if (!(is_same = col->IsEqualTo(cur_idx.array_id, cur_idx.id,
-                                       cur_idx_plus_one.array_id, cur_idx_plus_one.id)))
-          break;
+      if (CheckRangeBound(range + 1)) {
+        auto cur_idx = GetItemIndexWithShift(range);
+        auto cur_idx_plus_one = GetItemIndexWithShift(range + 1);
+        for (auto col : sort_relation_key_list_) {
+          if (!(is_same = col->IsEqualTo(cur_idx.array_id, cur_idx.id,
+                                         cur_idx_plus_one.array_id, cur_idx_plus_one.id)))
+            break;
+        }
+      } else {
+        is_same = false;
       }
       if (!is_same) break;
       range++;
@@ -84,6 +88,8 @@ class SortRelation {
     range_cache_ = range;
     return range;
   }
+
+  bool CheckRangeBound(int shift) { return (offset_ + shift) < total_length_; }
 
   template <typename T>
   arrow::Status GetColumn(int idx, std::shared_ptr<T>* out) {

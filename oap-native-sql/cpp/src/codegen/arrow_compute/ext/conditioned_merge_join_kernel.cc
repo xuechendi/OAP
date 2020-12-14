@@ -477,8 +477,8 @@ class ConditionedMergeJoinKernel::Impl {
       codes_ss << "}" << std::endl;
       codes_ss << "}" << std::endl;
       codes_ss << "if (" << found_match_name << ") {" << std::endl;
-      codes_ss << "if ((should_stop_ = !" << streamed_relation
-               << "->NextNewKey())) break;" << std::endl;
+      codes_ss << "if ((should_stop_ = !" << streamed_relation << "->Next())) break;"
+               << std::endl;
       codes_ss << "continue;" << std::endl;
       codes_ss << "}" << std::endl;
       codes_ss << "}" << std::endl;
@@ -552,8 +552,8 @@ class ConditionedMergeJoinKernel::Impl {
       codes_ss << "}" << std::endl;
       codes_ss << "}" << std::endl;
       codes_ss << "if (!" << found_match_name << ") {" << std::endl;
-      codes_ss << "if ((should_stop_ = !" << streamed_relation
-               << "->NextNewKey())) break;" << std::endl;
+      codes_ss << "if ((should_stop_ = !" << streamed_relation << "->Next())) break;"
+               << std::endl;
       codes_ss << "continue;" << std::endl;
       codes_ss << "}" << std::endl;
       codes_ss << set_value << std::endl;

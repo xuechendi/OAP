@@ -52,7 +52,10 @@ class TypedRelationColumn<DataType, enable_if_number<DataType>> : public Relatio
     return array_vector_[array_id]->IsNull(id);
   }
   bool IsEqualTo(int x_array_id, int x_id, int y_array_id, int y_id) {
-    if (IsNull(x_array_id, x_id) || IsNull(y_array_id, y_id)) return false;
+    auto is_null_x = IsNull(x_array_id, x_id);
+    auto is_null_y = IsNull(y_array_id, y_id);
+    if (is_null_x && is_null_y) return true;
+    if (is_null_x || is_null_y) return false;
     return GetValue(x_array_id, x_id) == GetValue(y_array_id, y_id);
   }
   arrow::Status AppendColumn(std::shared_ptr<arrow::Array> in) override {
@@ -82,7 +85,10 @@ class TypedRelationColumn<DataType, enable_if_string_like<DataType>>
     return array_vector_[array_id]->IsNull(id);
   }
   bool IsEqualTo(int x_array_id, int x_id, int y_array_id, int y_id) {
-    if (IsNull(x_array_id, x_id) || IsNull(y_array_id, y_id)) return false;
+    auto is_null_x = IsNull(x_array_id, x_id);
+    auto is_null_y = IsNull(y_array_id, y_id);
+    if (is_null_x && is_null_y) return true;
+    if (is_null_x || is_null_y) return false;
     return GetValue(x_array_id, x_id) == GetValue(y_array_id, y_id);
   }
   arrow::Status AppendColumn(std::shared_ptr<arrow::Array> in) override {

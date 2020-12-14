@@ -131,7 +131,13 @@ case class ColumnarCollapseCodegenStages(
       if (count >= 1) true
       else plan.children.map(existsJoins(_, count + 1)).exists(_ == true)
     case p: ColumnarSortMergeJoinExec =>
-      true
+      p.streamedPlan match {
+        case c: ColumnarSortExec => {
+          if (count >= 1) true
+          else plan.children.map(existsJoins(_, count + 1)).exists(_ == true)
+        }
+        case _ => false
+      }
     case p: ColumnarCodegenSupport if p.supportColumnarCodegen =>
       plan.children.map(existsJoins(_, count)).exists(_ == true)
     case _ =>
@@ -190,6 +196,9 @@ case class ColumnarCollapseCodegenStages(
       case p if !supportCodegen(p) =>
         // collapse them recursively
         new ColumnarInputAdapter(insertWholeStageCodegen(p))
+      case j: ColumnarSortMergeJoinExec if !j.streamedPlan.isInstanceOf[ColumnarSortExec] =>
+        // we don't support any ColumnarSortMergeJoin whose child is not ColumnarSort
+        new ColumnarInputAdapter(insertWholeStageCodegen(j))
       case j: ColumnarSortExec =>
         // The children of SortMergeJoin should do codegen separately.
         j.withNewChildren(
@@ -209,6 +218,9 @@ case class ColumnarCollapseCodegenStages(
           if plan.output.length == 1 && plan.output.head.dataType.isInstanceOf[ObjectType] =>
         plan.withNewChildren(plan.children.map(insertWholeStageCodegen))
       //case plan: ColumnarCodegenSupport if supportCodegen(plan) =>
+      case j: ColumnarSortMergeJoinExec if !j.streamedPlan.isInstanceOf[ColumnarSortExec] =>
+        // we don't support any ColumnarSortMergeJoin whose child is not ColumnarSort
+        j.withNewChildren(j.children.map(insertWholeStageCodegen))
       case plan: ColumnarCodegenSupport if supportCodegen(plan) && existsJoins(plan) =>
         ColumnarWholeStageCodegenExec(insertInputAdapter(plan))(
           codegenStageCounter.incrementAndGet())

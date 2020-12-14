@@ -541,7 +541,7 @@ object ColumnarSortMergeJoin extends Logging {
       case _: InnerLike =>
         "conditionedMergeJoinInner"
       case LeftSemi =>
-        "conditionedMergeJoinsSemi"
+        "conditionedMergeJoinSemi"
       case LeftOuter =>
         "conditionedMergeJoinOuter"
       case RightOuter =>

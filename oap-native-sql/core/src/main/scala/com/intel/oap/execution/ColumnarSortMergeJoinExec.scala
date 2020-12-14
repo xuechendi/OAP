@@ -201,6 +201,10 @@ case class ColumnarSortMergeJoinExec(
       (rightKeys, leftKeys, right, left)
     case LeftAnti =>
       (rightKeys, leftKeys, right, left)
+    case j: ExistenceJoin =>
+      (rightKeys, leftKeys, right, left)
+    case LeftExistence(_) =>
+      (rightKeys, leftKeys, right, left)
     case _ =>
       (leftKeys, rightKeys, left, right)
   }
