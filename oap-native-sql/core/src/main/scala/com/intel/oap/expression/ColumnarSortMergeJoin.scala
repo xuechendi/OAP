@@ -384,6 +384,35 @@ object ColumnarSortMergeJoin extends Logging {
     condition_probe_expr = TreeBuilder.makeExpression(codegen_probe_node, retType)
   }
 
+  def precheck(
+      leftKeys: Seq[Expression],
+      rightKeys: Seq[Expression],
+      resultSchema: StructType,
+      joinType: JoinType,
+      condition: Option[Expression],
+      left: SparkPlan,
+      right: SparkPlan,
+      joinTime: SQLMetric,
+      prepareTime: SQLMetric,
+      totaltime_sortmergejoin: SQLMetric,
+      numOutputRows: SQLMetric,
+      sparkConf: SparkConf): Unit = synchronized {
+    init(
+      leftKeys,
+      rightKeys,
+      resultSchema,
+      joinType,
+      condition,
+      left,
+      right,
+      joinTime,
+      prepareTime,
+      totaltime_sortmergejoin,
+      numOutputRows,
+      sparkConf)
+
+  }
+
   def prebuild(
       leftKeys: Seq[Expression],
       rightKeys: Seq[Expression],
