@@ -580,6 +580,7 @@ case class ColumnarOverrideRules(session: SparkSession) extends ColumnarRule wit
   def conf = session.sparkContext.getConf
   val preOverrides = ColumnarPreOverrides(conf)
   val postOverrides = ColumnarPostOverrides(conf)
+  val collapseOverrides = ColumnarCollapseCodegenStages(conf)
 
   override def preColumnarTransitions: Rule[SparkPlan] = plan => {
     if (columnarEnabled) {
@@ -591,7 +592,8 @@ case class ColumnarOverrideRules(session: SparkSession) extends ColumnarRule wit
 
   override def postColumnarTransitions: Rule[SparkPlan] = plan => {
     if (columnarEnabled) {
-      postOverrides(plan)
+      val tmpPlan = postOverrides(plan)
+      collapseOverrides(tmpPlan)
     } else {
       plan
     }
