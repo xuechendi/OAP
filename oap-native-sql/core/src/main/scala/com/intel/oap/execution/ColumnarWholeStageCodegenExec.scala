@@ -296,9 +296,7 @@ case class ColumnarWholeStageCodegenExec(child: SparkPlan)(val codegenStageId: I
             iter
           }
         case p: ColumnarSortExec =>
-          val buildTime = p.longMetric("buildTime")
           curRDD.zipPartitions(p.executeColumnar()) { (iter, depIter) =>
-            val beforeEval = System.nanoTime()
             ExecutorManager.tryTaskSet(numaBindingInfo)
             // Chendi: We have an assumption here
             // when curPlan is ColumnarSortExec,
@@ -308,9 +306,10 @@ case class ColumnarWholeStageCodegenExec(child: SparkPlan)(val codegenStageId: I
               TreeBuilder.makeExpression(
                 ctx.root,
                 Field.nullable("result", new ArrowType.Int(32, true)))
-            val sortRelationKernel = new ExpressionEvaluator()
-            sortRelationKernel
+            val cachedRelationKernel = new ExpressionEvaluator()
+            cachedRelationKernel
               .build(ctx.inputSchema, Lists.newArrayList(expression), ctx.outputSchema, true)
+            var buildElapse: Long = 0
             while (depIter.hasNext) {
               val dep_cb = depIter.next()
               if (dep_cb.numRows > 0) {
@@ -318,45 +317,12 @@ case class ColumnarWholeStageCodegenExec(child: SparkPlan)(val codegenStageId: I
                   dep_cb.column(i).asInstanceOf[ArrowWritableColumnVector].retain())
                 buildRelationBatchHolder += dep_cb
                 val dep_rb = ConverterUtils.createArrowRecordBatch(dep_cb)
-                sortRelationKernel.evaluate(dep_rb)
+                cachedRelationKernel.evaluate(dep_rb)
                 ConverterUtils.releaseArrowRecordBatch(dep_rb)
               }
             }
-            buildTime += ((System.nanoTime() - beforeEval) / 1000000)
-            dependentKernels += sortRelationKernel
-            dependentKernelIterators += sortRelationKernel.finishByIterator()
-
-            //////// handle streamed side sort /////////
-            val streamedSideBuildTime = streamedSortPlan.longMetric("buildTime")
-            val beforeStreamedEval = System.nanoTime()
-            val streamed_ctx =
-              streamedSortPlan.asInstanceOf[ColumnarCodegenSupport].dependentPlanCtx
-            val streamed_expression =
-              TreeBuilder.makeExpression(
-                streamed_ctx.root,
-                Field.nullable("result", new ArrowType.Int(32, true)))
-            val streamedSortRelationKernel = new ExpressionEvaluator()
-            streamedSortRelationKernel
-              .build(
-                streamed_ctx.inputSchema,
-                Lists.newArrayList(streamed_expression),
-                streamed_ctx.outputSchema,
-                true)
-            while (iter.hasNext) {
-              val dep_cb = iter.next()
-              if (dep_cb.numRows > 0) {
-                (0 until dep_cb.numCols).toList.foreach(i =>
-                  dep_cb.column(i).asInstanceOf[ArrowWritableColumnVector].retain())
-                buildRelationBatchHolder += dep_cb
-                val dep_rb = ConverterUtils.createArrowRecordBatch(dep_cb)
-                streamedSortRelationKernel.evaluate(dep_rb)
-                ConverterUtils.releaseArrowRecordBatch(dep_rb)
-              }
-            }
-            streamedSideBuildTime += ((System.nanoTime() - beforeStreamedEval) / 1000000)
-            dependentKernels += streamedSortRelationKernel
-            dependentKernelIterators += streamedSortRelationKernel.finishByIterator()
-
+            dependentKernels += cachedRelationKernel
+            dependentKernelIterators += cachedRelationKernel.finishByIterator()
             iter
           }
         case _ =>

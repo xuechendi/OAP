@@ -35,12 +35,12 @@ using sparkcolumnarplugin::precompile::TypeTraits;
 class SortRelation {
  public:
   SortRelation(
-      const std::shared_ptr<FixedSizeBinaryArray>& indices_in,
+      uint64_t items_total, const std::vector<int>& size_array,
       const std::vector<std::shared_ptr<RelationColumn>>& sort_relation_key_list,
       const std::vector<std::shared_ptr<RelationColumn>>& sort_relation_payload_list)
-      : indices_(indices_in),
-        total_length_(indices_in->length()),
-        indices_begin_((ArrayItemIndexS*)indices_in->value_data()) {
+      : items_total_(items_total),
+        size_array_(size_array),
+        num_arrays_(size_array.size()) {
     sort_relation_key_list_ = sort_relation_key_list;
     sort_relation_payload_list_ = sort_relation_payload_list;
   }
@@ -48,20 +48,38 @@ class SortRelation {
   ~SortRelation() {}
 
   ArrayItemIndexS GetItemIndexWithShift(int shift) {
-    return indices_begin_[offset_ + shift];
+    auto tmp_array_id = array_id_;
+    auto tmp_id = id_;
+
+    auto after = tmp_id + shift;
+    while (after >= size_array_[tmp_array_id]) {
+      after -= size_array_[tmp_array_id++];
+    }
+    return ArrayItemIndexS(tmp_array_id, after);
   }
 
   bool Next() {
+    if (!CheckRangeBound(1)) return false;
+    auto index = GetItemIndexWithShift(1);
+
+    array_id_ = index.array_id;
+    id_ = index.id;
     offset_++;
     range_cache_ = -1;
-    if (offset_ >= total_length_) return false;
+
     return true;
   }
 
   bool NextNewKey() {
-    offset_ += GetSameKeyRange();
+    auto range = GetSameKeyRange();
+    if (!CheckRangeBound(range)) return false;
+    auto index = GetItemIndexWithShift(range);
+
+    array_id_ = index.array_id;
+    id_ = index.id;
+    offset_ += range;
     range_cache_ = -1;
-    if (offset_ >= total_length_) return false;
+
     return true;
   }
 
@@ -89,7 +107,7 @@ class SortRelation {
     return range;
   }
 
-  bool CheckRangeBound(int shift) { return (offset_ + shift) < total_length_; }
+  bool CheckRangeBound(int shift) { return offset_ + shift < items_total_; }
 
   template <typename T>
   arrow::Status GetColumn(int idx, std::shared_ptr<T>* out) {
@@ -98,17 +116,13 @@ class SortRelation {
   }
 
  protected:
+  const uint64_t items_total_;
   uint64_t offset_ = 0;
-  const ArrayItemIndexS* indices_begin_;
-  const uint64_t total_length_;
-  std::shared_ptr<FixedSizeBinaryArray> indices_;
+  int array_id_ = 0;
+  int id_ = 0;
+  const int num_arrays_;
+  const std::vector<int> size_array_;
   int range_cache_ = -1;
   std::vector<std::shared_ptr<RelationColumn>> sort_relation_key_list_;
   std::vector<std::shared_ptr<RelationColumn>> sort_relation_payload_list_;
 };
-
-arrow::Status MakeSortRelation(
-    uint32_t key_type_id, arrow::compute::FunctionContext* ctx,
-    const std::vector<std::shared_ptr<RelationColumn>>& sort_relation_key_column,
-    const std::vector<std::shared_ptr<RelationColumn>>& sort_relation_payload_column,
-    std::shared_ptr<SortRelation>* out);

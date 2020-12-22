@@ -113,12 +113,14 @@ case class ColumnarSortExec(
   }
 
   override def dependentPlanCtx: ColumnarCodegenContext = {
+    // Originally, Sort dependent kernel is SortKernel
+    // While since we noticed that 
     val inputSchema = ConverterUtils.toArrowSchema(child.output)
     val outSchema = ConverterUtils.toArrowSchema(output)
     ColumnarCodegenContext(
       inputSchema,
       outSchema,
-      ColumnarSorter.prepareKernelFunction(sortOrder, child.output, sparkConf, 1))
+      ColumnarSorter.prepareRelationFunction(sortOrder, child.output))
   }
 
   override def doCodeGen: ColumnarCodegenContext = null

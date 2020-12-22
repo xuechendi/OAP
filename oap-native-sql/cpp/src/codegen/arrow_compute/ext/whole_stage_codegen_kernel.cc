@@ -153,9 +153,14 @@ class WholeStageCodeGenKernel::Impl {
       } else if (func_name.compare("conditionedMergeJoinExistence") == 0) {
         join_type = 4;
       }
-      std::vector<int> cur_hash_relation_idx = {*hash_relation_idx,
-                                                *hash_relation_idx + 1};
-      *hash_relation_idx += 2;
+      std::vector<int> cur_hash_relation_idx;
+      if (*hash_relation_idx == 0) {
+        cur_hash_relation_idx = {*hash_relation_idx, *hash_relation_idx + 1};
+        *hash_relation_idx += 2;
+      } else {
+        cur_hash_relation_idx = {*hash_relation_idx};
+        *hash_relation_idx += 1;
+      }
       RETURN_NOT_OK(ConditionedMergeJoinKernel::Make(
           ctx_, left_key_list, right_key_list, left_schema_list, right_schema_list,
           condition, join_type, result_list, cur_hash_relation_idx, out));

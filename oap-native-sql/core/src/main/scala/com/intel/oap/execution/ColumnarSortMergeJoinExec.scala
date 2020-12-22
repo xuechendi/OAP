@@ -70,12 +70,15 @@ case class ColumnarSortMergeJoinExec(
   val sparkConf = sparkContext.getConf
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
+    "numOutputBatches" -> SQLMetrics.createMetric(sparkContext, "number of output batches"),
     "prepareTime" -> SQLMetrics.createTimingMetric(sparkContext, "time to prepare left list"),
+    "processTime" -> SQLMetrics.createTimingMetric(sparkContext, "time to process"),
     "joinTime" -> SQLMetrics.createTimingMetric(sparkContext, "time to merge join"),
     "totaltime_sortmergejoin" -> SQLMetrics
       .createTimingMetric(sparkContext, "totaltime_sortmergejoin"))
 
   val numOutputRows = longMetric("numOutputRows")
+  val numOutputBatches = longMetric("numOutputBatches")
   val joinTime = longMetric("joinTime")
   val prepareTime = longMetric("prepareTime")
   val totaltime_sortmegejoin = longMetric("totaltime_sortmergejoin")
@@ -250,11 +253,20 @@ case class ColumnarSortMergeJoinExec(
   }
 
   override def getBuildPlans: Seq[SparkPlan] = {
-    buildPlan match {
+
+    val curBuildPlan = buildPlan match {
       case c: ColumnarCodegenSupport if c.supportColumnarCodegen == true =>
         c.getBuildPlans
       case _ =>
         Seq()
+    }
+    streamedPlan match {
+      case c: ColumnarCodegenSupport if c.isInstanceOf[ColumnarSortExec] =>
+        curBuildPlan ++ c.getBuildPlans
+      case c: ColumnarCodegenSupport if !c.isInstanceOf[ColumnarSortExec] =>
+        c.getBuildPlans ++ curBuildPlan
+      case _ =>
+        curBuildPlan
     }
   }
 
