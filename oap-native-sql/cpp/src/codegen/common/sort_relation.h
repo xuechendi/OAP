@@ -43,7 +43,6 @@ class SortRelation {
       : ctx_(ctx), items_total_(items_total) {
     sort_relation_key_list_ = sort_relation_key_list;
     sort_relation_payload_list_ = sort_relation_payload_list;
-
     int64_t buf_size = items_total_ * sizeof(ArrayItemIndexS);
     arrow::AllocateBuffer(ctx_->memory_pool(), buf_size, &indices_buf_);
     indices_begin_ = reinterpret_cast<ArrayItemIndexS*>(indices_buf_->mutable_data());
