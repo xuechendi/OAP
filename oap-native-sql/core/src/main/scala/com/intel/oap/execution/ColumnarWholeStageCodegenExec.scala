@@ -164,8 +164,6 @@ case class ColumnarWholeStageCodegenExec(child: SparkPlan)(val codegenStageId: I
     var curChild = child
     var idx = metrics.output_length_list.size - 1
     var child_process_time: Long = 0
-    System.out.println(
-      s"[metrcis] output_length is ${metrics.output_length_list.toList}, ${metrics.process_time_list.toList}")
     while (idx >= 0 && curChild.isInstanceOf[ColumnarCodegenSupport]) {
       curChild
         .asInstanceOf[ColumnarCodegenSupport]
@@ -338,7 +336,6 @@ case class ColumnarWholeStageCodegenExec(child: SparkPlan)(val codegenStageId: I
               Lists.newArrayList(expression),
               ctx.outputSchema,
               true)
-            var buildElapse: Long = 0
             while (depIter.hasNext) {
               val dep_cb = depIter.next()
               if (dep_cb.numRows > 0) {
@@ -351,7 +348,9 @@ case class ColumnarWholeStageCodegenExec(child: SparkPlan)(val codegenStageId: I
               }
             }
             dependentKernels += cachedRelationKernel
+            val beforeEval = System.nanoTime()
             dependentKernelIterators += cachedRelationKernel.finishByIterator()
+            build_elapse += System.nanoTime() - beforeEval
             iter
           }
         case _ =>
@@ -388,7 +387,9 @@ case class ColumnarWholeStageCodegenExec(child: SparkPlan)(val codegenStageId: I
         true)
       val nativeIterator = nativeKernel.finishByIterator()
       // we need to complete dependency RDD's firstly
+      val beforeBuild = System.nanoTime()
       nativeIterator.setDependencies(dependentKernelIterators.toArray)
+      build_elapse += System.nanoTime() - beforeBuild
       val resultStructType = ArrowUtils.fromArrowSchema(resCtx.outputSchema)
       val resIter = streamedSortPlan match {
         case p: ColumnarSortExec =>

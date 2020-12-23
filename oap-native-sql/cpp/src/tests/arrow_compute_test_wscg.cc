@@ -105,10 +105,11 @@ TEST(TestArrowComputeWSCG, WSCGTestSingleInnerJoin) {
   auto n_hash = TreeExprBuilder::MakeFunction("standalone", {n_hash_kernel}, uint32());
   auto hashRelation_expr = TreeExprBuilder::MakeExpression(n_hash, f_res);
   std::shared_ptr<CodeGenerator> expr_build;
-  ASSERT_NOT_OK(
-      CreateCodeGenerator(schema_table_0, {hashRelation_expr}, {}, &expr_build, true));
+  arrow::compute::FunctionContext ctx;
+  ASSERT_NOT_OK(CreateCodeGenerator(ctx.memory_pool(), schema_table_0,
+                                    {hashRelation_expr}, {}, &expr_build, true));
   std::shared_ptr<CodeGenerator> expr_probe;
-  ASSERT_NOT_OK(CreateCodeGenerator(schema_table_1, {probeArrays_expr},
+  ASSERT_NOT_OK(CreateCodeGenerator(ctx.memory_pool(), schema_table_1, {probeArrays_expr},
                                     {table1_f1, table0_f2}, &expr_probe, true));
   ///////////////////// Calculation //////////////////
   std::shared_ptr<arrow::RecordBatch> input_batch;
@@ -251,10 +252,11 @@ TEST(TestArrowComputeWSCG, WSCGTestProjectKeyInnerJoin) {
   auto n_hash = TreeExprBuilder::MakeFunction("standalone", {n_hash_kernel}, uint32());
   auto hashRelation_expr = TreeExprBuilder::MakeExpression(n_hash, f_res);
   std::shared_ptr<CodeGenerator> expr_build;
-  ASSERT_NOT_OK(
-      CreateCodeGenerator(schema_table_0, {hashRelation_expr}, {}, &expr_build, true));
+  arrow::compute::FunctionContext ctx;
+  ASSERT_NOT_OK(CreateCodeGenerator(ctx.memory_pool(), schema_table_0,
+                                    {hashRelation_expr}, {}, &expr_build, true));
   std::shared_ptr<CodeGenerator> expr_probe;
-  ASSERT_NOT_OK(CreateCodeGenerator(schema_table_1, {probeArrays_expr},
+  ASSERT_NOT_OK(CreateCodeGenerator(ctx.memory_pool(), schema_table_1, {probeArrays_expr},
                                     {table1_f1, table0_f2}, &expr_probe, true));
   ///////////////////// Calculation //////////////////
   std::shared_ptr<arrow::RecordBatch> input_batch;
@@ -410,10 +412,11 @@ TEST(TestArrowComputeWSCG, WSCGTestProjectFilterKeyInnerJoin) {
   auto n_hash = TreeExprBuilder::MakeFunction("standalone", {n_hash_kernel}, uint32());
   auto hashRelation_expr = TreeExprBuilder::MakeExpression(n_hash, f_res);
   std::shared_ptr<CodeGenerator> expr_build;
-  ASSERT_NOT_OK(
-      CreateCodeGenerator(schema_table_0, {hashRelation_expr}, {}, &expr_build, true));
+  arrow::compute::FunctionContext ctx;
+  ASSERT_NOT_OK(CreateCodeGenerator(ctx.memory_pool(), schema_table_0,
+                                    {hashRelation_expr}, {}, &expr_build, true));
   std::shared_ptr<CodeGenerator> expr_probe;
-  ASSERT_NOT_OK(CreateCodeGenerator(schema_table_1, {probeArrays_expr},
+  ASSERT_NOT_OK(CreateCodeGenerator(ctx.memory_pool(), schema_table_1, {probeArrays_expr},
                                     {table1_f1, table0_f2}, &expr_probe, true));
   ///////////////////// Calculation //////////////////
   std::shared_ptr<arrow::RecordBatch> input_batch;
@@ -535,11 +538,12 @@ TEST(TestArrowComputeWSCG, WSCGTestStringInnerJoin) {
   auto n_hash = TreeExprBuilder::MakeFunction("standalone", {n_hash_kernel}, uint32());
   auto hashRelation_expr = TreeExprBuilder::MakeExpression(n_hash, f_res);
   std::shared_ptr<CodeGenerator> expr_build;
-  ASSERT_NOT_OK(
-      CreateCodeGenerator(schema_table_0, {hashRelation_expr}, {}, &expr_build, true));
+  arrow::compute::FunctionContext ctx;
+  ASSERT_NOT_OK(CreateCodeGenerator(ctx.memory_pool(), schema_table_0,
+                                    {hashRelation_expr}, {}, &expr_build, true));
   std::shared_ptr<CodeGenerator> expr_probe;
   ASSERT_NOT_OK(CreateCodeGenerator(
-      schema_table_1, {probeArrays_expr},
+      ctx.memory_pool(), schema_table_1, {probeArrays_expr},
       {table0_f0, table0_f1, table0_f2, table1_f0, table1_f1}, &expr_probe, true));
   ///////////////////// Calculation //////////////////
   std::shared_ptr<arrow::RecordBatch> input_batch;
@@ -669,11 +673,12 @@ TEST(TestArrowComputeWSCG, WSCGTestTwoStringInnerJoin) {
   auto n_hash = TreeExprBuilder::MakeFunction("standalone", {n_hash_kernel}, uint32());
   auto hashRelation_expr = TreeExprBuilder::MakeExpression(n_hash, f_res);
   std::shared_ptr<CodeGenerator> expr_build;
-  ASSERT_NOT_OK(
-      CreateCodeGenerator(schema_table_0, {hashRelation_expr}, {}, &expr_build, true));
+  arrow::compute::FunctionContext ctx;
+  ASSERT_NOT_OK(CreateCodeGenerator(ctx.memory_pool(), schema_table_0,
+                                    {hashRelation_expr}, {}, &expr_build, true));
   std::shared_ptr<CodeGenerator> expr_probe;
   ASSERT_NOT_OK(CreateCodeGenerator(
-      schema_table_1, {probeArrays_expr},
+      ctx.memory_pool(), schema_table_1, {probeArrays_expr},
       {table0_f0, table0_f1, table0_f2, table1_f0, table1_f1}, &expr_probe, true));
   ///////////////////// Calculation //////////////////
   std::shared_ptr<arrow::RecordBatch> input_batch;
@@ -796,11 +801,12 @@ TEST(TestArrowComputeWSCG, WSCGTestOuterJoin) {
   auto n_hash = TreeExprBuilder::MakeFunction("standalone", {n_hash_kernel}, uint32());
   auto hashRelation_expr = TreeExprBuilder::MakeExpression(n_hash, f_res);
   std::shared_ptr<CodeGenerator> expr_build;
-  ASSERT_NOT_OK(
-      CreateCodeGenerator(schema_table_0, {hashRelation_expr}, {}, &expr_build, true));
+  arrow::compute::FunctionContext ctx;
+  ASSERT_NOT_OK(CreateCodeGenerator(ctx.memory_pool(), schema_table_0,
+                                    {hashRelation_expr}, {}, &expr_build, true));
   std::shared_ptr<CodeGenerator> expr_probe;
   ASSERT_NOT_OK(CreateCodeGenerator(
-      schema_table_1, {probeArrays_expr},
+      ctx.memory_pool(), schema_table_1, {probeArrays_expr},
       {table0_f0, table0_f1, table0_f2, table1_f0, table1_f1}, &expr_probe, true));
   ///////////////////// Calculation //////////////////
   std::shared_ptr<arrow::RecordBatch> input_batch;
@@ -924,10 +930,11 @@ TEST(TestArrowComputeWSCG, WSCGTestAntiJoin) {
   auto n_hash = TreeExprBuilder::MakeFunction("standalone", {n_hash_kernel}, uint32());
   auto hashRelation_expr = TreeExprBuilder::MakeExpression(n_hash, f_res);
   std::shared_ptr<CodeGenerator> expr_build;
-  ASSERT_NOT_OK(
-      CreateCodeGenerator(schema_table_0, {hashRelation_expr}, {}, &expr_build, true));
+  arrow::compute::FunctionContext ctx;
+  ASSERT_NOT_OK(CreateCodeGenerator(ctx.memory_pool(), schema_table_0,
+                                    {hashRelation_expr}, {}, &expr_build, true));
   std::shared_ptr<CodeGenerator> expr_probe;
-  ASSERT_NOT_OK(CreateCodeGenerator(schema_table_1, {probeArrays_expr},
+  ASSERT_NOT_OK(CreateCodeGenerator(ctx.memory_pool(), schema_table_1, {probeArrays_expr},
                                     {table1_f0, table1_f1}, &expr_probe, true));
   ///////////////////// Calculation //////////////////
   std::shared_ptr<arrow::RecordBatch> input_batch;
@@ -1050,10 +1057,11 @@ TEST(TestArrowComputeWSCG, WSCGTestAntiJoinWithCondition) {
   auto n_hash = TreeExprBuilder::MakeFunction("standalone", {n_hash_kernel}, uint32());
   auto hashRelation_expr = TreeExprBuilder::MakeExpression(n_hash, f_res);
   std::shared_ptr<CodeGenerator> expr_build;
-  ASSERT_NOT_OK(
-      CreateCodeGenerator(schema_table_0, {hashRelation_expr}, {}, &expr_build, true));
+  arrow::compute::FunctionContext ctx;
+  ASSERT_NOT_OK(CreateCodeGenerator(ctx.memory_pool(), schema_table_0,
+                                    {hashRelation_expr}, {}, &expr_build, true));
   std::shared_ptr<CodeGenerator> expr_probe;
-  ASSERT_NOT_OK(CreateCodeGenerator(schema_table_1, {probeArrays_expr},
+  ASSERT_NOT_OK(CreateCodeGenerator(ctx.memory_pool(), schema_table_1, {probeArrays_expr},
                                     {table1_f0, table1_f1}, &expr_probe, true));
   ///////////////////// Calculation //////////////////
   std::shared_ptr<arrow::RecordBatch> input_batch;
@@ -1170,10 +1178,11 @@ TEST(TestArrowComputeWSCG, WSCGTestSemiJoin) {
   auto n_hash = TreeExprBuilder::MakeFunction("standalone", {n_hash_kernel}, uint32());
   auto hashRelation_expr = TreeExprBuilder::MakeExpression(n_hash, f_res);
   std::shared_ptr<CodeGenerator> expr_build;
-  ASSERT_NOT_OK(
-      CreateCodeGenerator(schema_table_0, {hashRelation_expr}, {}, &expr_build, true));
+  arrow::compute::FunctionContext ctx;
+  ASSERT_NOT_OK(CreateCodeGenerator(ctx.memory_pool(), schema_table_0,
+                                    {hashRelation_expr}, {}, &expr_build, true));
   std::shared_ptr<CodeGenerator> expr_probe;
-  ASSERT_NOT_OK(CreateCodeGenerator(schema_table_1, {probeArrays_expr},
+  ASSERT_NOT_OK(CreateCodeGenerator(ctx.memory_pool(), schema_table_1, {probeArrays_expr},
                                     {table1_f0, table1_f1}, &expr_probe, true));
   ///////////////////// Calculation //////////////////
   std::shared_ptr<arrow::RecordBatch> input_batch;
@@ -1297,10 +1306,11 @@ TEST(TestArrowComputeWSCG, WSCGTestSemiJoinWithCondition) {
   auto n_hash = TreeExprBuilder::MakeFunction("standalone", {n_hash_kernel}, uint32());
   auto hashRelation_expr = TreeExprBuilder::MakeExpression(n_hash, f_res);
   std::shared_ptr<CodeGenerator> expr_build;
-  ASSERT_NOT_OK(
-      CreateCodeGenerator(schema_table_0, {hashRelation_expr}, {}, &expr_build, true));
+  arrow::compute::FunctionContext ctx;
+  ASSERT_NOT_OK(CreateCodeGenerator(ctx.memory_pool(), schema_table_0,
+                                    {hashRelation_expr}, {}, &expr_build, true));
   std::shared_ptr<CodeGenerator> expr_probe;
-  ASSERT_NOT_OK(CreateCodeGenerator(schema_table_1, {probeArrays_expr},
+  ASSERT_NOT_OK(CreateCodeGenerator(ctx.memory_pool(), schema_table_1, {probeArrays_expr},
                                     {table1_f0, table1_f1}, &expr_probe, true));
   ///////////////////// Calculation //////////////////
   std::shared_ptr<arrow::RecordBatch> input_batch;
@@ -1422,10 +1432,11 @@ TEST(TestArrowComputeWSCG, WSCGTestExistenceJoin) {
   auto n_hash = TreeExprBuilder::MakeFunction("standalone", {n_hash_kernel}, uint32());
   auto hashRelation_expr = TreeExprBuilder::MakeExpression(n_hash, f_res);
   std::shared_ptr<CodeGenerator> expr_build;
-  ASSERT_NOT_OK(
-      CreateCodeGenerator(schema_table_0, {hashRelation_expr}, {}, &expr_build, true));
+  arrow::compute::FunctionContext ctx;
+  ASSERT_NOT_OK(CreateCodeGenerator(ctx.memory_pool(), schema_table_0,
+                                    {hashRelation_expr}, {}, &expr_build, true));
   std::shared_ptr<CodeGenerator> expr_probe;
-  ASSERT_NOT_OK(CreateCodeGenerator(schema_table_1, {probeArrays_expr},
+  ASSERT_NOT_OK(CreateCodeGenerator(ctx.memory_pool(), schema_table_1, {probeArrays_expr},
                                     {table1_f0, f_exist, table1_f1}, &expr_probe, true));
   ///////////////////// Calculation //////////////////
   std::shared_ptr<arrow::RecordBatch> input_batch;
@@ -1561,10 +1572,11 @@ TEST(TestArrowComputeWSCG, WSCGTestSemiJoinWithCoalesce) {
   auto n_hash = TreeExprBuilder::MakeFunction("standalone", {n_hash_kernel}, uint32());
   auto hashRelation_expr = TreeExprBuilder::MakeExpression(n_hash, f_res);
   std::shared_ptr<CodeGenerator> expr_build;
-  ASSERT_NOT_OK(
-      CreateCodeGenerator(schema_table_0, {hashRelation_expr}, {}, &expr_build, true));
+  arrow::compute::FunctionContext ctx;
+  ASSERT_NOT_OK(CreateCodeGenerator(ctx.memory_pool(), schema_table_0,
+                                    {hashRelation_expr}, {}, &expr_build, true));
   std::shared_ptr<CodeGenerator> expr_probe;
-  ASSERT_NOT_OK(CreateCodeGenerator(schema_table_1, {probeArrays_expr},
+  ASSERT_NOT_OK(CreateCodeGenerator(ctx.memory_pool(), schema_table_1, {probeArrays_expr},
                                     {table1_f0, table1_f1}, &expr_probe, true));
   ///////////////////// Calculation //////////////////
   std::shared_ptr<arrow::RecordBatch> input_batch;
@@ -1684,8 +1696,9 @@ TEST(TestArrowComputeWSCG, WSCGTestStringInnerMergeJoin) {
   auto schema_table =
       arrow::schema({table0_f0, table0_f1, table0_f2, table1_f0, table1_f1});
   std::shared_ptr<CodeGenerator> expr_join;
+  arrow::compute::FunctionContext ctx;
   ASSERT_NOT_OK(CreateCodeGenerator(
-      arrow::schema({}), {mergeJoin_expr},
+      ctx.memory_pool(), arrow::schema({}), {mergeJoin_expr},
       {table0_f0, table0_f1, table0_f2, table1_f0, table1_f1}, &expr_join, true));
   /////////////// Sort Kernel ///////////////
   auto true_literal = TreeExprBuilder::MakeLiteral(true);
@@ -1708,9 +1721,9 @@ TEST(TestArrowComputeWSCG, WSCGTestStringInnerMergeJoin) {
       TreeExprBuilder::MakeFunction("standalone", {n_sort_to_indices_left}, uint32());
   auto sortArrays_expr_left = TreeExprBuilder::MakeExpression(n_sort_left, f_res);
   std::shared_ptr<CodeGenerator> expr_sort_left;
-  ASSERT_NOT_OK(CreateCodeGenerator(schema_table_0, {sortArrays_expr_left},
-                                    {table0_f0, table0_f1, table0_f2}, &expr_sort_left,
-                                    true));
+  ASSERT_NOT_OK(
+      CreateCodeGenerator(ctx.memory_pool(), schema_table_0, {sortArrays_expr_left},
+                          {table0_f0, table0_f1, table0_f2}, &expr_sort_left, true));
   ////////////////////////////////////////////////
   auto n_key_func_right = TreeExprBuilder::MakeFunction(
       "key_function", {TreeExprBuilder::MakeField(table1_f0)}, uint32());
@@ -1724,8 +1737,9 @@ TEST(TestArrowComputeWSCG, WSCGTestStringInnerMergeJoin) {
       TreeExprBuilder::MakeFunction("standalone", {n_sort_to_indices_right}, uint32());
   auto sortArrays_expr_right = TreeExprBuilder::MakeExpression(n_sort_right, f_res);
   std::shared_ptr<CodeGenerator> expr_sort_right;
-  ASSERT_NOT_OK(CreateCodeGenerator(schema_table_1, {sortArrays_expr_right},
-                                    {table1_f0, table1_f1}, &expr_sort_right, true));
+  ASSERT_NOT_OK(CreateCodeGenerator(ctx.memory_pool(), schema_table_1,
+                                    {sortArrays_expr_right}, {table1_f0, table1_f1},
+                                    &expr_sort_right, true));
 
   ///////////////////// Calculation //////////////////
   std::shared_ptr<arrow::RecordBatch> input_batch;
@@ -1836,9 +1850,10 @@ TEST(TestArrowComputeWSCG, WSCGTestInnerMergeJoin) {
   auto schema_table_1 = arrow::schema({table1_f0});
   auto schema_table = arrow::schema({table0_f0, table0_f1, table0_f2, table1_f0});
   std::shared_ptr<CodeGenerator> expr_join;
-  ASSERT_NOT_OK(CreateCodeGenerator(arrow::schema({}), {mergeJoin_expr},
-                                    {table0_f0, table0_f1, table0_f2, table1_f0},
-                                    &expr_join, true));
+  arrow::compute::FunctionContext ctx;
+  ASSERT_NOT_OK(CreateCodeGenerator(
+      ctx.memory_pool(), arrow::schema({}), {mergeJoin_expr},
+      {table0_f0, table0_f1, table0_f2, table1_f0}, &expr_join, true));
   /////////////// Sort Kernel ///////////////
   auto true_literal = TreeExprBuilder::MakeLiteral(true);
   auto false_literal = TreeExprBuilder::MakeLiteral(false);
@@ -1860,9 +1875,9 @@ TEST(TestArrowComputeWSCG, WSCGTestInnerMergeJoin) {
       TreeExprBuilder::MakeFunction("standalone", {n_sort_to_indices_left}, uint32());
   auto sortArrays_expr_left = TreeExprBuilder::MakeExpression(n_sort_left, f_res);
   std::shared_ptr<CodeGenerator> expr_sort_left;
-  ASSERT_NOT_OK(CreateCodeGenerator(schema_table_0, {sortArrays_expr_left},
-                                    {table0_f0, table0_f1, table0_f2}, &expr_sort_left,
-                                    true));
+  ASSERT_NOT_OK(
+      CreateCodeGenerator(ctx.memory_pool(), schema_table_0, {sortArrays_expr_left},
+                          {table0_f0, table0_f1, table0_f2}, &expr_sort_left, true));
   ////////////////////////////////////////////////
   auto n_key_func_right = TreeExprBuilder::MakeFunction(
       "key_function", {TreeExprBuilder::MakeField(table1_f0)}, uint32());
@@ -1876,7 +1891,8 @@ TEST(TestArrowComputeWSCG, WSCGTestInnerMergeJoin) {
       TreeExprBuilder::MakeFunction("standalone", {n_sort_to_indices_right}, uint32());
   auto sortArrays_expr_right = TreeExprBuilder::MakeExpression(n_sort_right, f_res);
   std::shared_ptr<CodeGenerator> expr_sort_right;
-  ASSERT_NOT_OK(CreateCodeGenerator(schema_table_1, {sortArrays_expr_right}, {table1_f0},
+  ASSERT_NOT_OK(CreateCodeGenerator(ctx.memory_pool(), schema_table_1,
+                                    {sortArrays_expr_right}, {table1_f0},
                                     &expr_sort_right, true));
 
   ///////////////////// Calculation //////////////////
@@ -1997,8 +2013,9 @@ TEST(TestArrowComputeWSCG, WSCGTestStringOuterMergeJoin) {
   auto schema_table =
       arrow::schema({table0_f0, table0_f1, table0_f2, table1_f0, table1_f1});
   std::shared_ptr<CodeGenerator> expr_join;
+  arrow::compute::FunctionContext ctx;
   ASSERT_NOT_OK(CreateCodeGenerator(
-      arrow::schema({}), {mergeJoin_expr},
+      ctx.memory_pool(), arrow::schema({}), {mergeJoin_expr},
       {table0_f0, table0_f1, table0_f2, table1_f0, table1_f1}, &expr_join, true));
   /////////////// Sort Kernel ///////////////
   auto true_literal = TreeExprBuilder::MakeLiteral(true);
@@ -2021,9 +2038,9 @@ TEST(TestArrowComputeWSCG, WSCGTestStringOuterMergeJoin) {
       TreeExprBuilder::MakeFunction("standalone", {n_sort_to_indices_left}, uint32());
   auto sortArrays_expr_left = TreeExprBuilder::MakeExpression(n_sort_left, f_res);
   std::shared_ptr<CodeGenerator> expr_sort_left;
-  ASSERT_NOT_OK(CreateCodeGenerator(schema_table_0, {sortArrays_expr_left},
-                                    {table0_f0, table0_f1, table0_f2}, &expr_sort_left,
-                                    true));
+  ASSERT_NOT_OK(
+      CreateCodeGenerator(ctx.memory_pool(), schema_table_0, {sortArrays_expr_left},
+                          {table0_f0, table0_f1, table0_f2}, &expr_sort_left, true));
   ////////////////////////////////////////////////
   auto n_key_func_right = TreeExprBuilder::MakeFunction(
       "key_function", {TreeExprBuilder::MakeField(table1_f0)}, uint32());
@@ -2037,8 +2054,9 @@ TEST(TestArrowComputeWSCG, WSCGTestStringOuterMergeJoin) {
       TreeExprBuilder::MakeFunction("standalone", {n_sort_to_indices_right}, uint32());
   auto sortArrays_expr_right = TreeExprBuilder::MakeExpression(n_sort_right, f_res);
   std::shared_ptr<CodeGenerator> expr_sort_right;
-  ASSERT_NOT_OK(CreateCodeGenerator(schema_table_1, {sortArrays_expr_right},
-                                    {table1_f0, table1_f1}, &expr_sort_right, true));
+  ASSERT_NOT_OK(CreateCodeGenerator(ctx.memory_pool(), schema_table_1,
+                                    {sortArrays_expr_right}, {table1_f0, table1_f1},
+                                    &expr_sort_right, true));
 
   ///////////////////// Calculation //////////////////
   std::shared_ptr<arrow::RecordBatch> input_batch;
@@ -2154,8 +2172,10 @@ TEST(TestArrowComputeWSCG, WSCGTestAntiMergeJoin) {
   auto schema_table =
       arrow::schema({table0_f0, table0_f1, table0_f2, table1_f0, table1_f1});
   std::shared_ptr<CodeGenerator> expr_join;
-  ASSERT_NOT_OK(CreateCodeGenerator(arrow::schema({}), {mergeJoin_expr},
-                                    {table1_f0, table1_f1}, &expr_join, true));
+  arrow::compute::FunctionContext ctx;
+  ASSERT_NOT_OK(CreateCodeGenerator(ctx.memory_pool(), arrow::schema({}),
+                                    {mergeJoin_expr}, {table1_f0, table1_f1}, &expr_join,
+                                    true));
   /////////////// Sort Kernel ///////////////
   auto true_literal = TreeExprBuilder::MakeLiteral(true);
   auto false_literal = TreeExprBuilder::MakeLiteral(false);
@@ -2177,9 +2197,9 @@ TEST(TestArrowComputeWSCG, WSCGTestAntiMergeJoin) {
       TreeExprBuilder::MakeFunction("standalone", {n_sort_to_indices_left}, uint32());
   auto sortArrays_expr_left = TreeExprBuilder::MakeExpression(n_sort_left, f_res);
   std::shared_ptr<CodeGenerator> expr_sort_left;
-  ASSERT_NOT_OK(CreateCodeGenerator(schema_table_0, {sortArrays_expr_left},
-                                    {table0_f0, table0_f1, table0_f2}, &expr_sort_left,
-                                    true));
+  ASSERT_NOT_OK(
+      CreateCodeGenerator(ctx.memory_pool(), schema_table_0, {sortArrays_expr_left},
+                          {table0_f0, table0_f1, table0_f2}, &expr_sort_left, true));
   ////////////////////////////////////////////////
   auto n_key_func_right = TreeExprBuilder::MakeFunction(
       "key_function", {TreeExprBuilder::MakeField(table1_f0)}, uint32());
@@ -2193,8 +2213,9 @@ TEST(TestArrowComputeWSCG, WSCGTestAntiMergeJoin) {
       TreeExprBuilder::MakeFunction("standalone", {n_sort_to_indices_right}, uint32());
   auto sortArrays_expr_right = TreeExprBuilder::MakeExpression(n_sort_right, f_res);
   std::shared_ptr<CodeGenerator> expr_sort_right;
-  ASSERT_NOT_OK(CreateCodeGenerator(schema_table_1, {sortArrays_expr_right},
-                                    {table1_f0, table1_f1}, &expr_sort_right, true));
+  ASSERT_NOT_OK(CreateCodeGenerator(ctx.memory_pool(), schema_table_1,
+                                    {sortArrays_expr_right}, {table1_f0, table1_f1},
+                                    &expr_sort_right, true));
 
   ///////////////////// Calculation //////////////////
   std::shared_ptr<arrow::RecordBatch> input_batch;
@@ -2307,8 +2328,10 @@ TEST(TestArrowComputeWSCG, WSCGTestAntiMergeJoinWithCondition) {
   auto schema_table =
       arrow::schema({table0_f0, table0_f1, table0_f2, table1_f0, table1_f1});
   std::shared_ptr<CodeGenerator> expr_join;
-  ASSERT_NOT_OK(CreateCodeGenerator(arrow::schema({}), {mergeJoin_expr},
-                                    {table1_f0, table1_f1}, &expr_join, true));
+  arrow::compute::FunctionContext ctx;
+  ASSERT_NOT_OK(CreateCodeGenerator(ctx.memory_pool(), arrow::schema({}),
+                                    {mergeJoin_expr}, {table1_f0, table1_f1}, &expr_join,
+                                    true));
   /////////////// Sort Kernel ///////////////
   auto true_literal = TreeExprBuilder::MakeLiteral(true);
   auto false_literal = TreeExprBuilder::MakeLiteral(false);
@@ -2330,9 +2353,9 @@ TEST(TestArrowComputeWSCG, WSCGTestAntiMergeJoinWithCondition) {
       TreeExprBuilder::MakeFunction("standalone", {n_sort_to_indices_left}, uint32());
   auto sortArrays_expr_left = TreeExprBuilder::MakeExpression(n_sort_left, f_res);
   std::shared_ptr<CodeGenerator> expr_sort_left;
-  ASSERT_NOT_OK(CreateCodeGenerator(schema_table_0, {sortArrays_expr_left},
-                                    {table0_f0, table0_f1, table0_f2}, &expr_sort_left,
-                                    true));
+  ASSERT_NOT_OK(
+      CreateCodeGenerator(ctx.memory_pool(), schema_table_0, {sortArrays_expr_left},
+                          {table0_f0, table0_f1, table0_f2}, &expr_sort_left, true));
   ////////////////////////////////////////////////
   auto n_key_func_right = TreeExprBuilder::MakeFunction(
       "key_function", {TreeExprBuilder::MakeField(table1_f0)}, uint32());
@@ -2346,8 +2369,9 @@ TEST(TestArrowComputeWSCG, WSCGTestAntiMergeJoinWithCondition) {
       TreeExprBuilder::MakeFunction("standalone", {n_sort_to_indices_right}, uint32());
   auto sortArrays_expr_right = TreeExprBuilder::MakeExpression(n_sort_right, f_res);
   std::shared_ptr<CodeGenerator> expr_sort_right;
-  ASSERT_NOT_OK(CreateCodeGenerator(schema_table_1, {sortArrays_expr_right},
-                                    {table1_f0, table1_f1}, &expr_sort_right, true));
+  ASSERT_NOT_OK(CreateCodeGenerator(ctx.memory_pool(), schema_table_1,
+                                    {sortArrays_expr_right}, {table1_f0, table1_f1},
+                                    &expr_sort_right, true));
 
   ///////////////////// Calculation //////////////////
   std::shared_ptr<arrow::RecordBatch> input_batch;
@@ -2457,8 +2481,10 @@ TEST(TestArrowComputeWSCG, WSCGTestSemiMergeJoin) {
   auto schema_table =
       arrow::schema({table0_f0, table0_f1, table0_f2, table1_f0, table1_f1});
   std::shared_ptr<CodeGenerator> expr_join;
-  ASSERT_NOT_OK(CreateCodeGenerator(arrow::schema({}), {mergeJoin_expr},
-                                    {table1_f0, table1_f1}, &expr_join, true));
+  arrow::compute::FunctionContext ctx;
+  ASSERT_NOT_OK(CreateCodeGenerator(ctx.memory_pool(), arrow::schema({}),
+                                    {mergeJoin_expr}, {table1_f0, table1_f1}, &expr_join,
+                                    true));
   /////////////// Sort Kernel ///////////////
   auto true_literal = TreeExprBuilder::MakeLiteral(true);
   auto false_literal = TreeExprBuilder::MakeLiteral(false);
@@ -2480,9 +2506,9 @@ TEST(TestArrowComputeWSCG, WSCGTestSemiMergeJoin) {
       TreeExprBuilder::MakeFunction("standalone", {n_sort_to_indices_left}, uint32());
   auto sortArrays_expr_left = TreeExprBuilder::MakeExpression(n_sort_left, f_res);
   std::shared_ptr<CodeGenerator> expr_sort_left;
-  ASSERT_NOT_OK(CreateCodeGenerator(schema_table_0, {sortArrays_expr_left},
-                                    {table0_f0, table0_f1, table0_f2}, &expr_sort_left,
-                                    true));
+  ASSERT_NOT_OK(
+      CreateCodeGenerator(ctx.memory_pool(), schema_table_0, {sortArrays_expr_left},
+                          {table0_f0, table0_f1, table0_f2}, &expr_sort_left, true));
   ////////////////////////////////////////////////
   auto n_key_func_right = TreeExprBuilder::MakeFunction(
       "key_function", {TreeExprBuilder::MakeField(table1_f0)}, uint32());
@@ -2496,8 +2522,9 @@ TEST(TestArrowComputeWSCG, WSCGTestSemiMergeJoin) {
       TreeExprBuilder::MakeFunction("standalone", {n_sort_to_indices_right}, uint32());
   auto sortArrays_expr_right = TreeExprBuilder::MakeExpression(n_sort_right, f_res);
   std::shared_ptr<CodeGenerator> expr_sort_right;
-  ASSERT_NOT_OK(CreateCodeGenerator(schema_table_1, {sortArrays_expr_right},
-                                    {table1_f0, table1_f1}, &expr_sort_right, true));
+  ASSERT_NOT_OK(CreateCodeGenerator(ctx.memory_pool(), schema_table_1,
+                                    {sortArrays_expr_right}, {table1_f0, table1_f1},
+                                    &expr_sort_right, true));
 
   ///////////////////// Calculation //////////////////
   std::shared_ptr<arrow::RecordBatch> input_batch;
@@ -2612,8 +2639,10 @@ TEST(TestArrowComputeWSCG, WSCGTestSemiMergeJoinWithCondition) {
   auto schema_table =
       arrow::schema({table0_f0, table0_f1, table0_f2, table1_f0, table1_f1});
   std::shared_ptr<CodeGenerator> expr_join;
-  ASSERT_NOT_OK(CreateCodeGenerator(arrow::schema({}), {mergeJoin_expr},
-                                    {table1_f0, table1_f1}, &expr_join, true));
+  arrow::compute::FunctionContext ctx;
+  ASSERT_NOT_OK(CreateCodeGenerator(ctx.memory_pool(), arrow::schema({}),
+                                    {mergeJoin_expr}, {table1_f0, table1_f1}, &expr_join,
+                                    true));
   /////////////// Sort Kernel ///////////////
   auto true_literal = TreeExprBuilder::MakeLiteral(true);
   auto false_literal = TreeExprBuilder::MakeLiteral(false);
@@ -2635,9 +2664,9 @@ TEST(TestArrowComputeWSCG, WSCGTestSemiMergeJoinWithCondition) {
       TreeExprBuilder::MakeFunction("standalone", {n_sort_to_indices_left}, uint32());
   auto sortArrays_expr_left = TreeExprBuilder::MakeExpression(n_sort_left, f_res);
   std::shared_ptr<CodeGenerator> expr_sort_left;
-  ASSERT_NOT_OK(CreateCodeGenerator(schema_table_0, {sortArrays_expr_left},
-                                    {table0_f0, table0_f1, table0_f2}, &expr_sort_left,
-                                    true));
+  ASSERT_NOT_OK(
+      CreateCodeGenerator(ctx.memory_pool(), schema_table_0, {sortArrays_expr_left},
+                          {table0_f0, table0_f1, table0_f2}, &expr_sort_left, true));
   ////////////////////////////////////////////////
   auto n_key_func_right = TreeExprBuilder::MakeFunction(
       "key_function", {TreeExprBuilder::MakeField(table1_f0)}, uint32());
@@ -2651,8 +2680,9 @@ TEST(TestArrowComputeWSCG, WSCGTestSemiMergeJoinWithCondition) {
       TreeExprBuilder::MakeFunction("standalone", {n_sort_to_indices_right}, uint32());
   auto sortArrays_expr_right = TreeExprBuilder::MakeExpression(n_sort_right, f_res);
   std::shared_ptr<CodeGenerator> expr_sort_right;
-  ASSERT_NOT_OK(CreateCodeGenerator(schema_table_1, {sortArrays_expr_right},
-                                    {table1_f0, table1_f1}, &expr_sort_right, true));
+  ASSERT_NOT_OK(CreateCodeGenerator(ctx.memory_pool(), schema_table_1,
+                                    {sortArrays_expr_right}, {table1_f0, table1_f1},
+                                    &expr_sort_right, true));
 
   ///////////////////// Calculation //////////////////
   std::shared_ptr<arrow::RecordBatch> input_batch;
@@ -2765,8 +2795,10 @@ TEST(TestArrowComputeWSCG, WSCGTestExistenceMergeJoin) {
   auto schema_table =
       arrow::schema({table0_f0, table0_f1, table0_f2, table1_f0, table1_f1});
   std::shared_ptr<CodeGenerator> expr_join;
-  ASSERT_NOT_OK(CreateCodeGenerator(arrow::schema({}), {mergeJoin_expr},
-                                    {table1_f0, table1_f1, f_exist}, &expr_join, true));
+  arrow::compute::FunctionContext ctx;
+  ASSERT_NOT_OK(CreateCodeGenerator(ctx.memory_pool(), arrow::schema({}),
+                                    {mergeJoin_expr}, {table1_f0, table1_f1, f_exist},
+                                    &expr_join, true));
   /////////////// Sort Kernel ///////////////
   auto true_literal = TreeExprBuilder::MakeLiteral(true);
   auto false_literal = TreeExprBuilder::MakeLiteral(false);
@@ -2788,9 +2820,9 @@ TEST(TestArrowComputeWSCG, WSCGTestExistenceMergeJoin) {
       TreeExprBuilder::MakeFunction("standalone", {n_sort_to_indices_left}, uint32());
   auto sortArrays_expr_left = TreeExprBuilder::MakeExpression(n_sort_left, f_res);
   std::shared_ptr<CodeGenerator> expr_sort_left;
-  ASSERT_NOT_OK(CreateCodeGenerator(schema_table_0, {sortArrays_expr_left},
-                                    {table0_f0, table0_f1, table0_f2}, &expr_sort_left,
-                                    true));
+  ASSERT_NOT_OK(
+      CreateCodeGenerator(ctx.memory_pool(), schema_table_0, {sortArrays_expr_left},
+                          {table0_f0, table0_f1, table0_f2}, &expr_sort_left, true));
   ////////////////////////////////////////////////
   auto n_key_func_right = TreeExprBuilder::MakeFunction(
       "key_function", {TreeExprBuilder::MakeField(table1_f0)}, uint32());
@@ -2804,8 +2836,9 @@ TEST(TestArrowComputeWSCG, WSCGTestExistenceMergeJoin) {
       TreeExprBuilder::MakeFunction("standalone", {n_sort_to_indices_right}, uint32());
   auto sortArrays_expr_right = TreeExprBuilder::MakeExpression(n_sort_right, f_res);
   std::shared_ptr<CodeGenerator> expr_sort_right;
-  ASSERT_NOT_OK(CreateCodeGenerator(schema_table_1, {sortArrays_expr_right},
-                                    {table1_f0, table1_f1}, &expr_sort_right, true));
+  ASSERT_NOT_OK(CreateCodeGenerator(ctx.memory_pool(), schema_table_1,
+                                    {sortArrays_expr_right}, {table1_f0, table1_f1},
+                                    &expr_sort_right, true));
 
   ///////////////////// Calculation //////////////////
   std::shared_ptr<arrow::RecordBatch> input_batch;
@@ -2924,8 +2957,10 @@ TEST(TestArrowComputeWSCG, WSCGTestExistenceMergeJoinWithCondition) {
   auto schema_table =
       arrow::schema({table0_f0, table0_f1, table0_f2, table1_f0, table1_f1});
   std::shared_ptr<CodeGenerator> expr_join;
-  ASSERT_NOT_OK(CreateCodeGenerator(arrow::schema({}), {mergeJoin_expr},
-                                    {table1_f0, table1_f1, f_exist}, &expr_join, true));
+  arrow::compute::FunctionContext ctx;
+  ASSERT_NOT_OK(CreateCodeGenerator(ctx.memory_pool(), arrow::schema({}),
+                                    {mergeJoin_expr}, {table1_f0, table1_f1, f_exist},
+                                    &expr_join, true));
   /////////////// Sort Kernel ///////////////
   auto true_literal = TreeExprBuilder::MakeLiteral(true);
   auto false_literal = TreeExprBuilder::MakeLiteral(false);
@@ -2947,9 +2982,9 @@ TEST(TestArrowComputeWSCG, WSCGTestExistenceMergeJoinWithCondition) {
       TreeExprBuilder::MakeFunction("standalone", {n_sort_to_indices_left}, uint32());
   auto sortArrays_expr_left = TreeExprBuilder::MakeExpression(n_sort_left, f_res);
   std::shared_ptr<CodeGenerator> expr_sort_left;
-  ASSERT_NOT_OK(CreateCodeGenerator(schema_table_0, {sortArrays_expr_left},
-                                    {table0_f0, table0_f1, table0_f2}, &expr_sort_left,
-                                    true));
+  ASSERT_NOT_OK(
+      CreateCodeGenerator(ctx.memory_pool(), schema_table_0, {sortArrays_expr_left},
+                          {table0_f0, table0_f1, table0_f2}, &expr_sort_left, true));
   ////////////////////////////////////////////////
   auto n_key_func_right = TreeExprBuilder::MakeFunction(
       "key_function", {TreeExprBuilder::MakeField(table1_f0)}, uint32());
@@ -2963,8 +2998,9 @@ TEST(TestArrowComputeWSCG, WSCGTestExistenceMergeJoinWithCondition) {
       TreeExprBuilder::MakeFunction("standalone", {n_sort_to_indices_right}, uint32());
   auto sortArrays_expr_right = TreeExprBuilder::MakeExpression(n_sort_right, f_res);
   std::shared_ptr<CodeGenerator> expr_sort_right;
-  ASSERT_NOT_OK(CreateCodeGenerator(schema_table_1, {sortArrays_expr_right},
-                                    {table1_f0, table1_f1}, &expr_sort_right, true));
+  ASSERT_NOT_OK(CreateCodeGenerator(ctx.memory_pool(), schema_table_1,
+                                    {sortArrays_expr_right}, {table1_f0, table1_f1},
+                                    &expr_sort_right, true));
 
   ///////////////////// Calculation //////////////////
   std::shared_ptr<arrow::RecordBatch> input_batch;
@@ -3084,8 +3120,9 @@ TEST(TestArrowComputeWSCG, WSCGTestTwoKeysOuterMergeJoin) {
   auto schema_table =
       arrow::schema({table0_f0, table0_f1, table0_f2, table1_f0, table1_f1});
   std::shared_ptr<CodeGenerator> expr_join;
+  arrow::compute::FunctionContext ctx;
   ASSERT_NOT_OK(CreateCodeGenerator(
-      arrow::schema({}), {mergeJoin_expr},
+      ctx.memory_pool(), arrow::schema({}), {mergeJoin_expr},
       {table0_f0, table0_f1, table0_f2, table1_f0, table1_f1}, &expr_join, true));
   /////////////// Sort Kernel ///////////////
   auto true_literal = TreeExprBuilder::MakeLiteral(true);
@@ -3114,9 +3151,9 @@ TEST(TestArrowComputeWSCG, WSCGTestTwoKeysOuterMergeJoin) {
       TreeExprBuilder::MakeFunction("standalone", {n_sort_to_indices_left}, uint32());
   auto sortArrays_expr_left = TreeExprBuilder::MakeExpression(n_sort_left, f_res);
   std::shared_ptr<CodeGenerator> expr_sort_left;
-  ASSERT_NOT_OK(CreateCodeGenerator(schema_table_0, {sortArrays_expr_left},
-                                    {table0_f0, table0_f1, table0_f2}, &expr_sort_left,
-                                    true));
+  ASSERT_NOT_OK(
+      CreateCodeGenerator(ctx.memory_pool(), schema_table_0, {sortArrays_expr_left},
+                          {table0_f0, table0_f1, table0_f2}, &expr_sort_left, true));
   ////////////////////////////////////////////////
   auto n_key_func_right = TreeExprBuilder::MakeFunction(
       "key_function",
@@ -3134,8 +3171,9 @@ TEST(TestArrowComputeWSCG, WSCGTestTwoKeysOuterMergeJoin) {
       TreeExprBuilder::MakeFunction("standalone", {n_sort_to_indices_right}, uint32());
   auto sortArrays_expr_right = TreeExprBuilder::MakeExpression(n_sort_right, f_res);
   std::shared_ptr<CodeGenerator> expr_sort_right;
-  ASSERT_NOT_OK(CreateCodeGenerator(schema_table_1, {sortArrays_expr_right},
-                                    {table1_f0, table1_f1}, &expr_sort_right, true));
+  ASSERT_NOT_OK(CreateCodeGenerator(ctx.memory_pool(), schema_table_1,
+                                    {sortArrays_expr_right}, {table1_f0, table1_f1},
+                                    &expr_sort_right, true));
 
   ///////////////////// Calculation //////////////////
   std::shared_ptr<arrow::RecordBatch> input_batch;
@@ -3281,8 +3319,10 @@ TEST(TestArrowComputeWSCG, WSCGTestContinuousMergeJoinSemiExistence) {
   auto schema_table_1 = arrow::schema({table1_f0, table1_f1});
   auto schema_table_2 = arrow::schema({table2_f0});
   std::shared_ptr<CodeGenerator> expr_join;
-  ASSERT_NOT_OK(CreateCodeGenerator(arrow::schema({}), {mergeJoin_expr},
-                                    {table1_f0, table1_f1, f_exist}, &expr_join, true));
+  arrow::compute::FunctionContext ctx;
+  ASSERT_NOT_OK(CreateCodeGenerator(ctx.memory_pool(), arrow::schema({}),
+                                    {mergeJoin_expr}, {table1_f0, table1_f1, f_exist},
+                                    &expr_join, true));
   /////////////// Sort Kernel ///////////////
   auto true_literal = TreeExprBuilder::MakeLiteral(true);
   auto false_literal = TreeExprBuilder::MakeLiteral(false);
@@ -3304,9 +3344,9 @@ TEST(TestArrowComputeWSCG, WSCGTestContinuousMergeJoinSemiExistence) {
       TreeExprBuilder::MakeFunction("standalone", {n_sort_to_indices_left}, uint32());
   auto sortArrays_expr_left = TreeExprBuilder::MakeExpression(n_sort_left, f_res);
   std::shared_ptr<CodeGenerator> expr_sort_left;
-  ASSERT_NOT_OK(CreateCodeGenerator(schema_table_0, {sortArrays_expr_left},
-                                    {table0_f0, table0_f1, table0_f2}, &expr_sort_left,
-                                    true));
+  ASSERT_NOT_OK(
+      CreateCodeGenerator(ctx.memory_pool(), schema_table_0, {sortArrays_expr_left},
+                          {table0_f0, table0_f1, table0_f2}, &expr_sort_left, true));
   ////////////////////////////////////////////////
   auto n_key_func_right = TreeExprBuilder::MakeFunction(
       "key_function", {TreeExprBuilder::MakeField(table1_f0)}, uint32());
@@ -3320,8 +3360,9 @@ TEST(TestArrowComputeWSCG, WSCGTestContinuousMergeJoinSemiExistence) {
       TreeExprBuilder::MakeFunction("standalone", {n_sort_to_indices_right}, uint32());
   auto sortArrays_expr_right = TreeExprBuilder::MakeExpression(n_sort_right, f_res);
   std::shared_ptr<CodeGenerator> expr_sort_right;
-  ASSERT_NOT_OK(CreateCodeGenerator(schema_table_1, {sortArrays_expr_right},
-                                    {table1_f0, table1_f1}, &expr_sort_right, true));
+  ASSERT_NOT_OK(CreateCodeGenerator(ctx.memory_pool(), schema_table_1,
+                                    {sortArrays_expr_right}, {table1_f0, table1_f1},
+                                    &expr_sort_right, true));
   ////////////////////////////////////////////////
   auto n_key_func_left_2 = TreeExprBuilder::MakeFunction(
       "key_function", {TreeExprBuilder::MakeField(table2_f0)}, uint32());
@@ -3336,7 +3377,8 @@ TEST(TestArrowComputeWSCG, WSCGTestContinuousMergeJoinSemiExistence) {
       TreeExprBuilder::MakeFunction("standalone", {n_sort_to_indices_left_2}, uint32());
   auto sortArrays_expr_left_2 = TreeExprBuilder::MakeExpression(n_sort_left_2, f_res);
   std::shared_ptr<CodeGenerator> expr_sort_left_2;
-  ASSERT_NOT_OK(CreateCodeGenerator(schema_table_2, {sortArrays_expr_left_2}, {table2_f0},
+  ASSERT_NOT_OK(CreateCodeGenerator(ctx.memory_pool(), schema_table_2,
+                                    {sortArrays_expr_left_2}, {table2_f0},
                                     &expr_sort_left_2, true));
 
   ///////////////////// Calculation //////////////////
@@ -3503,8 +3545,10 @@ TEST(TestArrowComputeWSCG, WSCGTestContinuousMergeJoinSemiExistenceWithCondition
   auto schema_table_1 = arrow::schema({table1_f0, table1_f1});
   auto schema_table_2 = arrow::schema({table2_f0, table2_f1});
   std::shared_ptr<CodeGenerator> expr_join;
-  ASSERT_NOT_OK(CreateCodeGenerator(arrow::schema({}), {mergeJoin_expr},
-                                    {table1_f0, table1_f1, f_exist}, &expr_join, true));
+  arrow::compute::FunctionContext ctx;
+  ASSERT_NOT_OK(CreateCodeGenerator(ctx.memory_pool(), arrow::schema({}),
+                                    {mergeJoin_expr}, {table1_f0, table1_f1, f_exist},
+                                    &expr_join, true));
   /////////////// Sort Kernel //////////////////////////
   auto true_literal = TreeExprBuilder::MakeLiteral(true);
   auto false_literal = TreeExprBuilder::MakeLiteral(false);
@@ -3513,7 +3557,7 @@ TEST(TestArrowComputeWSCG, WSCGTestContinuousMergeJoinSemiExistenceWithCondition
       TreeExprBuilder::MakeFunction("sort_nulls_order", {true_literal}, uint32());
   auto NaN_check = TreeExprBuilder::MakeFunction("NaN_check", {false_literal}, uint32());
   auto result_type = TreeExprBuilder::MakeFunction(
-      "result_type", {TreeExprBuilder::MakeLiteral((int)1)}, uint32());
+      "result_type", {TreeExprBuilder::MakeLiteral((int)0)}, uint32());
   auto n_key_func_left = TreeExprBuilder::MakeFunction(
       "key_function", {TreeExprBuilder::MakeField(table0_f0)}, uint32());
   auto n_key_field_left = TreeExprBuilder::MakeFunction(
@@ -3526,9 +3570,19 @@ TEST(TestArrowComputeWSCG, WSCGTestContinuousMergeJoinSemiExistenceWithCondition
       TreeExprBuilder::MakeFunction("standalone", {n_sort_to_indices_left}, uint32());
   auto sortArrays_expr_left = TreeExprBuilder::MakeExpression(n_sort_left, f_res);
   std::shared_ptr<CodeGenerator> expr_sort_left;
-  ASSERT_NOT_OK(CreateCodeGenerator(schema_table_0, {sortArrays_expr_left},
-                                    {table0_f0, table0_f1, table0_f2}, &expr_sort_left,
-                                    true));
+  ASSERT_NOT_OK(
+      CreateCodeGenerator(ctx.memory_pool(), schema_table_0, {sortArrays_expr_left},
+                          {table0_f0, table0_f1, table0_f2}, &expr_sort_left, true));
+  auto n_cached_relation_left = TreeExprBuilder::MakeFunction(
+      "standalone",
+      {TreeExprBuilder::MakeFunction("CachedRelation", {n_key_field_left}, uint32())},
+      uint32());
+  auto cached_relation_expr_left =
+      TreeExprBuilder::MakeExpression(n_cached_relation_left, f_res);
+  std::shared_ptr<CodeGenerator> expr_cached_relation_left;
+  ASSERT_NOT_OK(CreateCodeGenerator(
+      ctx.memory_pool(), schema_table_0, {cached_relation_expr_left},
+      {table0_f0, table0_f1, table0_f2}, &expr_cached_relation_left, true));
   ////////////////////////////////////////////////
   auto n_key_func_right = TreeExprBuilder::MakeFunction(
       "key_function", {TreeExprBuilder::MakeField(table1_f0)}, uint32());
@@ -3542,8 +3596,19 @@ TEST(TestArrowComputeWSCG, WSCGTestContinuousMergeJoinSemiExistenceWithCondition
       TreeExprBuilder::MakeFunction("standalone", {n_sort_to_indices_right}, uint32());
   auto sortArrays_expr_right = TreeExprBuilder::MakeExpression(n_sort_right, f_res);
   std::shared_ptr<CodeGenerator> expr_sort_right;
-  ASSERT_NOT_OK(CreateCodeGenerator(schema_table_1, {sortArrays_expr_right},
-                                    {table1_f0, table1_f1}, &expr_sort_right, true));
+  ASSERT_NOT_OK(CreateCodeGenerator(ctx.memory_pool(), schema_table_1,
+                                    {sortArrays_expr_right}, {table1_f0, table1_f1},
+                                    &expr_sort_right, true));
+  auto n_cached_relation_right = TreeExprBuilder::MakeFunction(
+      "standalone",
+      {TreeExprBuilder::MakeFunction("CachedRelation", {n_key_field_right}, uint32())},
+      uint32());
+  auto cached_relation_expr_right =
+      TreeExprBuilder::MakeExpression(n_cached_relation_right, f_res);
+  std::shared_ptr<CodeGenerator> expr_cached_relation_right;
+  ASSERT_NOT_OK(CreateCodeGenerator(ctx.memory_pool(), schema_table_1,
+                                    {cached_relation_expr_right}, {table1_f0, table1_f1},
+                                    &expr_cached_relation_right, true));
   ////////////////////////////////////////////////
   auto n_key_func_left_2 = TreeExprBuilder::MakeFunction(
       "key_function", {TreeExprBuilder::MakeField(table2_f0)}, uint32());
@@ -3558,8 +3623,19 @@ TEST(TestArrowComputeWSCG, WSCGTestContinuousMergeJoinSemiExistenceWithCondition
       TreeExprBuilder::MakeFunction("standalone", {n_sort_to_indices_left_2}, uint32());
   auto sortArrays_expr_left_2 = TreeExprBuilder::MakeExpression(n_sort_left_2, f_res);
   std::shared_ptr<CodeGenerator> expr_sort_left_2;
-  ASSERT_NOT_OK(CreateCodeGenerator(schema_table_2, {sortArrays_expr_left_2},
-                                    {table2_f0, table2_f1}, &expr_sort_left_2, true));
+  ASSERT_NOT_OK(CreateCodeGenerator(ctx.memory_pool(), schema_table_2,
+                                    {sortArrays_expr_left_2}, {table2_f0, table2_f1},
+                                    &expr_sort_left_2, true));
+  auto n_cached_relation_left_2 = TreeExprBuilder::MakeFunction(
+      "standalone",
+      {TreeExprBuilder::MakeFunction("CachedRelation", {n_key_field_left_2}, uint32())},
+      uint32());
+  auto cached_relation_expr_left_2 =
+      TreeExprBuilder::MakeExpression(n_cached_relation_left_2, f_res);
+  std::shared_ptr<CodeGenerator> expr_cached_relation_left_2;
+  ASSERT_NOT_OK(CreateCodeGenerator(ctx.memory_pool(), schema_table_2,
+                                    {cached_relation_expr_left_2}, {table2_f0, table2_f1},
+                                    &expr_cached_relation_left_2, true));
 
   ///////////////////// Calculation //////////////////
   std::shared_ptr<arrow::RecordBatch> input_batch;
@@ -3620,16 +3696,28 @@ TEST(TestArrowComputeWSCG, WSCGTestContinuousMergeJoinSemiExistenceWithCondition
   for (auto batch : table_2) {
     ASSERT_NOT_OK(expr_sort_left_2->evaluate(batch, &dummy_result_batches));
   }
-  std::vector<std::shared_ptr<ResultIteratorBase>> dependency_iterator_list;
   std::shared_ptr<ResultIteratorBase> build_result_iterator;
-  std::shared_ptr<ResultIteratorBase> probe_result_iterator_base;
-  ASSERT_NOT_OK(expr_sort_left->finish(&build_result_iterator));
-  dependency_iterator_list.push_back(build_result_iterator);
-  ASSERT_NOT_OK(expr_sort_right->finish(&build_result_iterator));
-  dependency_iterator_list.push_back(build_result_iterator);
-  ASSERT_NOT_OK(expr_sort_left_2->finish(&build_result_iterator));
-  dependency_iterator_list.push_back(build_result_iterator);
+  std::vector<std::shared_ptr<CodeGenerator>> expr_list = {
+      expr_sort_left, expr_sort_right, expr_sort_left_2};
+  std::vector<std::shared_ptr<CodeGenerator>> cache_list = {
+      expr_cached_relation_left, expr_cached_relation_right, expr_cached_relation_left_2};
+  std::vector<std::shared_ptr<ResultIteratorBase>> dependency_iterator_list;
+  for (int i = 0; i < expr_list.size(); i++) {
+    auto expr = expr_list[i];
+    auto cache = cache_list[i];
+    ASSERT_NOT_OK(expr->finish(&build_result_iterator));
+    auto rb_iter = std::dynamic_pointer_cast<ResultIterator<arrow::RecordBatch>>(
+        build_result_iterator);
+    while (rb_iter->HasNext()) {
+      std::shared_ptr<arrow::RecordBatch> result_batch;
+      ASSERT_NOT_OK(rb_iter->Next(&result_batch));
+      ASSERT_NOT_OK(cache->evaluate(result_batch, &dummy_result_batches));
+    }
+    ASSERT_NOT_OK(cache->finish(&build_result_iterator));
+    dependency_iterator_list.push_back(build_result_iterator);
+  }
 
+  std::shared_ptr<ResultIteratorBase> probe_result_iterator_base;
   ASSERT_NOT_OK(expr_join->finish(&probe_result_iterator_base));
   auto probe_result_iterator =
       std::dynamic_pointer_cast<ResultIterator<arrow::RecordBatch>>(
@@ -3639,9 +3727,14 @@ TEST(TestArrowComputeWSCG, WSCGTestContinuousMergeJoinSemiExistenceWithCondition
   int i = 0;
   while (probe_result_iterator->HasNext()) {
     std::shared_ptr<arrow::RecordBatch> result_batch;
-
     ASSERT_NOT_OK(probe_result_iterator->Next(&result_batch));
     ASSERT_NOT_OK(Equals(*(expected_table[i++]).get(), *result_batch.get()));
+  }
+  std::shared_ptr<Metrics> metrics;
+  probe_result_iterator_base->GetMetrics(&metrics);
+  for (int i = 0; i < metrics->num_metrics; i++) {
+    std::cout << "CodeGen " << i << ": Process time is " << metrics->process_time[i]
+              << ", output length is " << metrics->output_length[i] << std::endl;
   }
 }
 
