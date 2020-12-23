@@ -91,7 +91,8 @@ case class ColumnarShuffledHashJoinExec(
   }
 
   override def output: Seq[Attribute] =
-    if (projectList == null) super.output else projectList.map(_.toAttribute)
+    if (projectList == null || projectList.isEmpty) super.output
+    else projectList.map(_.toAttribute)
 
   /*protected lazy val (buildPlan, streamedPlan, buildKeys, streamKeys) = buildSide match {
     case BuildLeft => (left, right, leftKeys, rightKeys)
@@ -153,7 +154,7 @@ case class ColumnarShuffledHashJoinExec(
     // 2. create streamCodeGen and return
 
     val output_skip_alias =
-      if (projectList == null) super.output
+      if (projectList == null || projectList.isEmpty) super.output
       else projectList.map(expr => ConverterUtils.getAttrFromExpr(expr, true))
     ColumnarConditionedProbeJoin.prepareKernelFunction(
       buildKeyExprs,
@@ -311,7 +312,7 @@ case class ColumnarShuffledHashJoinExec(
   //////////////////////////////////////////////////////////////////////////////////////////////////////
   def getResultSchema = {
     val attributes =
-      if (projectList == null) super.output
+      if (projectList == null || projectList.isEmpty) super.output
       else projectList.map(expr => ConverterUtils.getAttrFromExpr(expr, true))
     ArrowUtils.fromAttributes(attributes)
   }

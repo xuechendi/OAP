@@ -98,7 +98,8 @@ case class ColumnarBroadcastHashJoinExec(
   }
 
   override def output: Seq[Attribute] =
-    if (projectList == null) super.output else projectList.map(_.toAttribute)
+    if (projectList == null || projectList.isEmpty) super.output
+    else projectList.map(_.toAttribute)
   def getBuildPlan: SparkPlan = buildPlan
   override def supportsColumnar = true
   override protected def doExecute(): RDD[InternalRow] = {
@@ -150,7 +151,7 @@ case class ColumnarBroadcastHashJoinExec(
     val buildInputAttributes: List[Attribute] = buildPlan.output.toList
     val streamInputAttributes: List[Attribute] = streamedPlan.output.toList
     val output_skip_alias =
-      if (projectList == null) super.output
+      if (projectList == null || projectList.isEmpty) super.output
       else projectList.map(expr => ConverterUtils.getAttrFromExpr(expr, true))
     ColumnarConditionedProbeJoin.prepareKernelFunction(
       buildKeyExprs,
@@ -342,7 +343,7 @@ case class ColumnarBroadcastHashJoinExec(
   //////////////////////////////////////////////////////////////////////////////////////////////////////
   def getResultSchema = {
     val attributes =
-      if (projectList == null) super.output
+      if (projectList == null || projectList.isEmpty) super.output
       else projectList.map(expr => ConverterUtils.getAttrFromExpr(expr, true))
     ArrowUtils.fromAttributes(attributes)
   }

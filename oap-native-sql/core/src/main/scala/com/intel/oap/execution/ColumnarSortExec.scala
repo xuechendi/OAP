@@ -73,14 +73,14 @@ case class ColumnarSortExec(
     if (global) OrderedDistribution(sortOrder) :: Nil else UnspecifiedDistribution :: Nil
 
   override lazy val metrics = Map(
-    "totalSortTime" -> SQLMetrics.createTimingMetric(sparkContext, "totaltime_sort"),
+    "processTime" -> SQLMetrics.createTimingMetric(sparkContext, "totaltime_sort"),
     "buildTime" -> SQLMetrics.createTimingMetric(sparkContext, "time in cache all data"),
     "sortTime" -> SQLMetrics.createTimingMetric(sparkContext, "time in sort process"),
     "shuffleTime" -> SQLMetrics.createTimingMetric(sparkContext, "time in shuffle process"),
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
     "numOutputBatches" -> SQLMetrics.createMetric(sparkContext, "output_batches"))
 
-  val elapse = longMetric("totalSortTime")
+  val elapse = longMetric("processTime")
   val sortTime = longMetric("sortTime")
   val shuffleTime = longMetric("shuffleTime")
   val numOutputRows = longMetric("numOutputRows")

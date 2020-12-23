@@ -63,7 +63,8 @@ case class ColumnarSortMergeJoinExec(
     condition: Option[Expression],
     left: SparkPlan,
     right: SparkPlan,
-    isSkewJoin: Boolean = false)
+    isSkewJoin: Boolean = false,
+    projectList: Seq[NamedExpression] = null)
     extends BinaryExecNode
     with ColumnarCodegenSupport {
 
@@ -132,6 +133,8 @@ case class ColumnarSortMergeJoinExec(
   }
 
   override def output: Seq[Attribute] = {
+    if (projectList != null && !projectList.isEmpty)
+      return projectList.map(_.toAttribute)
     joinType match {
       case _: InnerLike =>
         left.output ++ right.output
@@ -241,14 +244,17 @@ case class ColumnarSortMergeJoinExec(
 
   override def supportColumnarCodegen: Boolean = true
 
-  def getKernelFunction: TreeNode = {
+  val output_skip_alias =
+    if (projectList == null || projectList.isEmpty) output
+    else projectList.map(expr => ConverterUtils.getAttrFromExpr(expr, true))
 
+  def getKernelFunction: TreeNode = {
     ColumnarSortMergeJoin.prepareKernelFunction(
       buildKeys,
       streamedKeys,
       buildPlan.output,
       streamedPlan.output,
-      output,
+      output_skip_alias,
       joinType,
       condition)
   }
@@ -294,7 +300,7 @@ case class ColumnarSortMergeJoinExec(
       case _ =>
         null
     }
-    val outputSchema = ConverterUtils.toArrowSchema(output)
+    val outputSchema = ConverterUtils.toArrowSchema(output_skip_alias)
     val (codeGenNode, inputSchema) = if (childCtx != null) {
       (
         TreeBuilder.makeFunction(
