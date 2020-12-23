@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include <arrow/buffer.h>
 #include <arrow/compute/context.h>
 #include <arrow/status.h>
 #include <arrow/type_fwd.h>
@@ -35,48 +36,47 @@ using sparkcolumnarplugin::precompile::TypeTraits;
 class SortRelation {
  public:
   SortRelation(
-      uint64_t items_total, const std::vector<int>& size_array,
+      arrow::compute::FunctionContext* ctx, uint64_t items_total,
+      const std::vector<int>& size_array,
       const std::vector<std::shared_ptr<RelationColumn>>& sort_relation_key_list,
       const std::vector<std::shared_ptr<RelationColumn>>& sort_relation_payload_list)
-      : items_total_(items_total),
-        size_array_(size_array),
-        num_arrays_(size_array.size()) {
+      : ctx_(ctx), items_total_(items_total) {
     sort_relation_key_list_ = sort_relation_key_list;
     sort_relation_payload_list_ = sort_relation_payload_list;
+
+    int64_t buf_size = items_total_ * sizeof(ArrayItemIndexS);
+    arrow::AllocateBuffer(ctx_->memory_pool(), buf_size, &indices_buf_);
+    indices_begin_ = reinterpret_cast<ArrayItemIndexS*>(indices_buf_->mutable_data());
+    uint64_t idx = 0;
+    int array_id = 0;
+    for (auto size : size_array) {
+      for (int id = 0; id < size; id++) {
+        indices_begin_[idx].array_id = array_id;
+        indices_begin_[idx].id = id;
+        idx++;
+      }
+      array_id++;
+    }
+
+    std::shared_ptr<arrow::FixedSizeBinaryType> out_type;
   }
 
   ~SortRelation() {}
 
   ArrayItemIndexS GetItemIndexWithShift(int shift) {
-    auto tmp_array_id = array_id_;
-    auto tmp_id = id_;
-
-    auto after = tmp_id + shift;
-    while (after >= size_array_[tmp_array_id]) {
-      after -= size_array_[tmp_array_id++];
-    }
-    return ArrayItemIndexS(tmp_array_id, after);
+    return indices_begin_[offset_ + shift];
   }
 
   bool Next() {
     if (!CheckRangeBound(1)) return false;
-    auto index = GetItemIndexWithShift(1);
-
-    array_id_ = index.array_id;
-    id_ = index.id;
     offset_++;
     range_cache_ = -1;
-
     return true;
   }
 
   bool NextNewKey() {
     auto range = GetSameKeyRange();
     if (!CheckRangeBound(range)) return false;
-    auto index = GetItemIndexWithShift(range);
-
-    array_id_ = index.array_id;
-    id_ = index.id;
     offset_ += range;
     range_cache_ = -1;
 
@@ -116,12 +116,11 @@ class SortRelation {
   }
 
  protected:
+  arrow::compute::FunctionContext* ctx_;
+  std::shared_ptr<arrow::Buffer> indices_buf_;
+  ArrayItemIndexS* indices_begin_;
   const uint64_t items_total_;
   uint64_t offset_ = 0;
-  int array_id_ = 0;
-  int id_ = 0;
-  const int num_arrays_;
-  const std::vector<int> size_array_;
   int range_cache_ = -1;
   std::vector<std::shared_ptr<RelationColumn>> sort_relation_key_list_;
   std::vector<std::shared_ptr<RelationColumn>> sort_relation_payload_list_;

@@ -1473,7 +1473,7 @@ class CachedRelationKernel::Impl {
       key_relation_list.push_back(sort_relation_list[key_id]);
     }
     auto sort_relation = std::make_shared<SortRelation>(
-        items_total_, length_list_, key_relation_list, sort_relation_list);
+        ctx_, items_total_, length_list_, key_relation_list, sort_relation_list);
     *out = std::make_shared<SortRelationResultIterator>(sort_relation);
     return arrow::Status::OK();
   }
