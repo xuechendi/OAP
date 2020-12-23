@@ -103,6 +103,7 @@ case class ColumnarSortMergeJoinExec(
   }
 
   override def supportsColumnar = true
+
   override protected def doExecute(): RDD[InternalRow] = {
     throw new UnsupportedOperationException(
       s"ColumnarSortMergeJoinExec doesn't support doExecute")
@@ -277,6 +278,15 @@ case class ColumnarSortMergeJoinExec(
       this
   }
 
+  override def updateMetrics(out_num_rows: Long, process_time: Long): Unit = {
+    val numOutputRows = longMetric("numOutputRows")
+    val procTime = longMetric("processTime")
+    procTime.set(process_time / 1000000)
+    numOutputRows += out_num_rows
+  }
+
+  override def getChild: SparkPlan = streamedPlan
+
   override def doCodeGen: ColumnarCodegenContext = {
     val childCtx = streamedPlan match {
       case c: ColumnarCodegenSupport if c.supportColumnarCodegen == true =>
@@ -294,11 +304,10 @@ case class ColumnarSortMergeJoinExec(
         childCtx.inputSchema)
     } else {
       (
-        TreeBuilder
-          .makeFunction(
-            s"child",
-            Lists.newArrayList(getKernelFunction),
-            new ArrowType.Int(32, true)),
+        TreeBuilder.makeFunction(
+          s"child",
+          Lists.newArrayList(getKernelFunction),
+          new ArrowType.Int(32, true)),
         new Schema(Lists.newArrayList()))
     }
     ColumnarCodegenContext(inputSchema, outputSchema, codeGenNode)
@@ -352,16 +361,15 @@ case class ColumnarSortMergeJoinExec(
     right.executeColumnar().zipPartitions(left.executeColumnar()) { (streamIter, buildIter) =>
       ColumnarPluginConfig.getConf(sparkConf)
       val execTempDir = ColumnarPluginConfig.getTempFile
-      val jarList = listJars
-        .map(jarUrl => {
-          logWarning(s"Get Codegened library Jar ${jarUrl}")
-          UserAddedJarUtils.fetchJarFromSpark(
-            jarUrl,
-            execTempDir,
-            s"spark-columnar-plugin-codegen-precompile-${signature}.jar",
-            sparkConf)
-          s"${execTempDir}/spark-columnar-plugin-codegen-precompile-${signature}.jar"
-        })
+      val jarList = listJars.map(jarUrl => {
+        logWarning(s"Get Codegened library Jar ${jarUrl}")
+        UserAddedJarUtils.fetchJarFromSpark(
+          jarUrl,
+          execTempDir,
+          s"spark-columnar-plugin-codegen-precompile-${signature}.jar",
+          sparkConf)
+        s"${execTempDir}/spark-columnar-plugin-codegen-precompile-${signature}.jar"
+      })
 
       val vsmj = ColumnarSortMergeJoin.create(
         leftKeys,

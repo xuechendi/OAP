@@ -134,6 +134,15 @@ case class ColumnarBroadcastHashJoinExec(
       ColumnarConditionedProbeJoin.prepareHashBuildFunction(buildKeyExprs, buildPlan.output, 2))
   }
 
+  override def updateMetrics(out_num_rows: Long, process_time: Long): Unit = {
+    val numOutputRows = longMetric("numOutputRows")
+    val procTime = longMetric("processTime")
+    procTime.set(process_time / 1000000)
+    numOutputRows += out_num_rows
+  }
+
+  override def getChild: SparkPlan = streamedPlan
+
   override def supportColumnarCodegen: Boolean = true
 
   def getKernelFunction: TreeNode = {
@@ -172,11 +181,10 @@ case class ColumnarBroadcastHashJoinExec(
         childCtx.inputSchema)
     } else {
       (
-        TreeBuilder
-          .makeFunction(
-            s"child",
-            Lists.newArrayList(getKernelFunction),
-            new ArrowType.Int(32, true)),
+        TreeBuilder.makeFunction(
+          s"child",
+          Lists.newArrayList(getKernelFunction),
+          new ArrowType.Int(32, true)),
         ConverterUtils.toArrowSchema(streamedPlan.output))
     }
     ColumnarCodegenContext(inputSchema, outputSchema, codeGenNode)
@@ -185,11 +193,10 @@ case class ColumnarBroadcastHashJoinExec(
   def doCodeGenForStandalone: ColumnarCodegenContext = {
     val outputSchema = ConverterUtils.toArrowSchema(output)
     val (codeGenNode, inputSchema) = (
-      TreeBuilder
-        .makeFunction(
-          s"child",
-          Lists.newArrayList(getKernelFunction),
-          new ArrowType.Int(32, true)),
+      TreeBuilder.makeFunction(
+        s"child",
+        Lists.newArrayList(getKernelFunction),
+        new ArrowType.Int(32, true)),
       ConverterUtils.toArrowSchema(streamedPlan.output))
     ColumnarCodegenContext(inputSchema, outputSchema, codeGenNode)
   }
@@ -233,8 +240,7 @@ case class ColumnarBroadcastHashJoinExec(
         TreeBuilder.makeExpression(
           hash_relation_function,
           Field.nullable("result", new ArrowType.Int(32, true)))
-      hashRelationKernel
-        .build(hash_relation_schema, Lists.newArrayList(hash_relation_expr), true)
+      hashRelationKernel.build(hash_relation_schema, Lists.newArrayList(hash_relation_expr), true)
       val hashRelationResultIterator = hashRelationKernel.finishByIterator()
       // we need to set original recordBatch to hashRelationKernel
       var numRows = 0
@@ -295,9 +301,8 @@ case class ColumnarBroadcastHashJoinExec(
           val cb = iter.next()
           val beforeEval = System.nanoTime()
           if (cb.numRows == 0) {
-            val resultColumnVectors = ArrowWritableColumnVector
-              .allocateColumns(0, resultStructType)
-              .toArray
+            val resultColumnVectors =
+              ArrowWritableColumnVector.allocateColumns(0, resultStructType).toArray
             return new ColumnarBatch(resultColumnVectors.map(_.asInstanceOf[ColumnVector]), 0)
           }
           val input_rb =
@@ -419,16 +424,15 @@ case class ColumnarBroadcastHashJoinExec(
       ExecutorManager.tryTaskSet(numaBindingInfo)
       ColumnarPluginConfig.getConf(sparkConf)
       val execTempDir = ColumnarPluginConfig.getTempFile
-      val jarList = listJars
-        .map(jarUrl => {
-          logWarning(s"Get Codegened library Jar ${jarUrl}")
-          UserAddedJarUtils.fetchJarFromSpark(
-            jarUrl,
-            execTempDir,
-            s"spark-columnar-plugin-codegen-precompile-${signature}.jar",
-            sparkConf)
-          s"${execTempDir}/spark-columnar-plugin-codegen-precompile-${signature}.jar"
-        })
+      val jarList = listJars.map(jarUrl => {
+        logWarning(s"Get Codegened library Jar ${jarUrl}")
+        UserAddedJarUtils.fetchJarFromSpark(
+          jarUrl,
+          execTempDir,
+          s"spark-columnar-plugin-codegen-precompile-${signature}.jar",
+          sparkConf)
+        s"${execTempDir}/spark-columnar-plugin-codegen-precompile-${signature}.jar"
+      })
       val resCtx = getCodeGenCtx
       val expression =
         TreeBuilder
@@ -492,9 +496,8 @@ case class ColumnarBroadcastHashJoinExec(
         override def next(): ColumnarBatch = {
           val cb = streamIter.next()
           if (cb.numRows == 0) {
-            val resultColumnVectors = ArrowWritableColumnVector
-              .allocateColumns(0, resultStructType)
-              .toArray
+            val resultColumnVectors =
+              ArrowWritableColumnVector.allocateColumns(0, resultStructType).toArray
             return new ColumnarBatch(resultColumnVectors.map(_.asInstanceOf[ColumnVector]), 0)
           }
           val beforeEval = System.nanoTime()

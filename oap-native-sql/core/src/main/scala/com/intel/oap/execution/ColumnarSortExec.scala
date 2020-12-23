@@ -73,8 +73,7 @@ case class ColumnarSortExec(
     if (global) OrderedDistribution(sortOrder) :: Nil else UnspecifiedDistribution :: Nil
 
   override lazy val metrics = Map(
-    "totalSortTime" -> SQLMetrics
-      .createTimingMetric(sparkContext, "totaltime_sort"),
+    "totalSortTime" -> SQLMetrics.createTimingMetric(sparkContext, "totaltime_sort"),
     "buildTime" -> SQLMetrics.createTimingMetric(sparkContext, "time in cache all data"),
     "sortTime" -> SQLMetrics.createTimingMetric(sparkContext, "time in sort process"),
     "shuffleTime" -> SQLMetrics.createTimingMetric(sparkContext, "time in shuffle process"),
@@ -112,9 +111,18 @@ case class ColumnarSortExec(
       this
   }
 
+  override def updateMetrics(out_num_rows: Long, process_time: Long): Unit = {
+    val numOutputRows = longMetric("numOutputRows")
+    val procTime = longMetric("processTime")
+    procTime.set(process_time / 1000000)
+    numOutputRows += out_num_rows
+  }
+
+  override def getChild: SparkPlan = child
+
   override def dependentPlanCtx: ColumnarCodegenContext = {
     // Originally, Sort dependent kernel is SortKernel
-    // While since we noticed that 
+    // While since we noticed that
     val inputSchema = ConverterUtils.toArrowSchema(child.output)
     val outSchema = ConverterUtils.toArrowSchema(output)
     ColumnarCodegenContext(
@@ -169,16 +177,15 @@ case class ColumnarSortExec(
       } else {
         ColumnarPluginConfig.getConf(sparkConf)
         val execTempDir = ColumnarPluginConfig.getTempFile
-        val jarList = listJars
-          .map(jarUrl => {
-            logWarning(s"Get Codegened library Jar ${jarUrl}")
-            UserAddedJarUtils.fetchJarFromSpark(
-              jarUrl,
-              execTempDir,
-              s"spark-columnar-plugin-codegen-precompile-${signature}.jar",
-              sparkConf)
-            s"${execTempDir}/spark-columnar-plugin-codegen-precompile-${signature}.jar"
-          })
+        val jarList = listJars.map(jarUrl => {
+          logWarning(s"Get Codegened library Jar ${jarUrl}")
+          UserAddedJarUtils.fetchJarFromSpark(
+            jarUrl,
+            execTempDir,
+            s"spark-columnar-plugin-codegen-precompile-${signature}.jar",
+            sparkConf)
+          s"${execTempDir}/spark-columnar-plugin-codegen-precompile-${signature}.jar"
+        })
         val sorter = ColumnarSorter.create(
           sortOrder,
           child.output,
