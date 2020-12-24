@@ -311,6 +311,8 @@ class ConditionedMergeJoinKernel::Impl {
     auto condition_name = "ConditionCheck_" + relation_id;
     auto range_name = "range_" + relation_id;
     auto range_id = "range_" + relation_id + "_i";
+    auto streamed_range_name = "streamed_range_" + relation_id;
+    auto streamed_range_id = "streamed_range_" + relation_id + "_i";
     auto fill_null_name = "fill_null_" + relation_id;
     auto build_relation = "sort_relation_" + relation_id + "_";
     auto streamed_relation = "sort_relation_" + std::to_string(relation_id_[1]) + "_";
@@ -341,8 +343,13 @@ class ConditionedMergeJoinKernel::Impl {
     ///////////////////////////
 
     if (use_relation_for_stream) {
+      codes_ss << "auto " << streamed_range_name << " = " << streamed_relation
+               << "->GetSameKeyRange();" << std::endl;
+      codes_ss << "for (int " << streamed_range_id << " = 0; " << streamed_range_id
+               << " < " << streamed_range_name << "; " << streamed_range_id << "++) {"
+               << std::endl;
       codes_ss << "auto " << right_index_name << " = " << streamed_relation
-               << "->GetItemIndexWithShift(0);" << std::endl;
+               << "->GetItemIndexWithShift(" << streamed_range_id << ");" << std::endl;
     }
     codes_ss << "ArrayItemIndexS " << left_index_name << ";" << std::endl;
     codes_ss << "for (int " << range_id << " = 0; " << range_id << " < " << range_name
@@ -366,7 +373,8 @@ class ConditionedMergeJoinKernel::Impl {
     }
     finish_codes_ss << "} // end of Inner Join" << std::endl;
     if (use_relation_for_stream) {
-      finish_codes_ss << "should_stop_ = !" << streamed_relation << "->Next();"
+      finish_codes_ss << "} // end of Inner Join" << std::endl;
+      finish_codes_ss << "should_stop_ = !" << streamed_relation << "->NextNewKey();"
                       << std::endl;
     }
     (*output)->process_codes += codes_ss.str();
@@ -386,6 +394,8 @@ class ConditionedMergeJoinKernel::Impl {
     auto range_name = "range_" + relation_id;
     auto fill_null_name = "fill_null_" + relation_id;
     auto range_id = "range_" + relation_id + "_i";
+    auto streamed_range_name = "streamed_range_" + relation_id;
+    auto streamed_range_id = "streamed_range_" + relation_id + "_i";
     auto build_relation = "sort_relation_" + relation_id + "_";
     auto streamed_relation = "sort_relation_" + std::to_string(relation_id_[1]) + "_";
     auto left_index_name = "left_index_" + relation_id;
@@ -412,8 +422,13 @@ class ConditionedMergeJoinKernel::Impl {
     ///////////////////////////
 
     if (use_relation_for_stream) {
+      codes_ss << "auto " << streamed_range_name << " = " << streamed_relation
+               << "->GetSameKeyRange();" << std::endl;
+      codes_ss << "for (int " << streamed_range_id << " = 0; " << streamed_range_id
+               << " < " << streamed_range_name << "; " << streamed_range_id << "++) {"
+               << std::endl;
       codes_ss << "auto " << right_index_name << " = " << streamed_relation
-               << "->GetItemIndexWithShift(0);" << std::endl;
+               << "->GetItemIndexWithShift(" << streamed_range_id << ");" << std::endl;
     }
     codes_ss << "ArrayItemIndexS " << left_index_name << ";" << std::endl;
     codes_ss << "for (int " << range_id << " = 0; " << range_id << " < " << range_name
@@ -439,7 +454,8 @@ class ConditionedMergeJoinKernel::Impl {
     }
     finish_codes_ss << "} // end of Outer Join" << std::endl;
     if (use_relation_for_stream) {
-      finish_codes_ss << "should_stop_ = !" << streamed_relation << "->Next();"
+      finish_codes_ss << "} // end of Outer Join" << std::endl;
+      finish_codes_ss << "should_stop_ = !" << streamed_relation << "->NextNewKey();"
                       << std::endl;
     }
     (*output)->process_codes += codes_ss.str();
@@ -460,6 +476,8 @@ class ConditionedMergeJoinKernel::Impl {
     auto fill_null_name = "fill_null_" + relation_id;
     auto found_match_name = "found_" + relation_id;
     auto range_id = "range_" + relation_id + "_i";
+    auto streamed_range_name = "streamed_range_" + relation_id;
+    auto streamed_range_id = "streamed_range_" + relation_id + "_i";
     auto build_relation = "sort_relation_" + relation_id + "_";
     auto streamed_relation = "sort_relation_" + std::to_string(relation_id_[1]) + "_";
     auto left_index_name = "left_index_" + relation_id;
@@ -493,8 +511,13 @@ class ConditionedMergeJoinKernel::Impl {
     ///////////////////////////
 
     if (use_relation_for_stream) {
+      codes_ss << "auto " << streamed_range_name << " = " << streamed_relation
+               << "->GetSameKeyRange();" << std::endl;
+      codes_ss << "for (int " << streamed_range_id << " = 0; " << streamed_range_id
+               << " < " << streamed_range_name << "; " << streamed_range_id << "++) {"
+               << std::endl;
       codes_ss << "auto " << right_index_name << " = " << streamed_relation
-               << "->GetItemIndexWithShift(0);" << std::endl;
+               << "->GetItemIndexWithShift(" << streamed_range_id << ");" << std::endl;
     }
     codes_ss << "for (int " << range_id << " = 0; " << range_id << " < 1;" << range_id
              << "++) {" << std::endl;
@@ -517,10 +540,6 @@ class ConditionedMergeJoinKernel::Impl {
       codes_ss << "}" << std::endl;
       codes_ss << "}" << std::endl;
       codes_ss << "if (" << found_match_name << ") {" << std::endl;
-      if (use_relation_for_stream) {
-        codes_ss << "if ((should_stop_ = !" << streamed_relation << "->Next())) break;"
-                 << std::endl;
-      }
       codes_ss << "continue;" << std::endl;
       codes_ss << "}" << std::endl;
       codes_ss << "}" << std::endl;
@@ -530,8 +549,8 @@ class ConditionedMergeJoinKernel::Impl {
     }
     finish_codes_ss << "} // end of anti Join" << std::endl;
     if (use_relation_for_stream) {
-      finish_codes_ss << "if (!" << found_match_name << ")" << std::endl;
-      finish_codes_ss << "should_stop_ = !" << streamed_relation << "->Next();"
+      finish_codes_ss << "} // end of anti Join" << std::endl;
+      finish_codes_ss << "should_stop_ = !" << streamed_relation << "->NextNewKey();"
                       << std::endl;
     }
     (*output)->process_codes += codes_ss.str();
@@ -552,6 +571,8 @@ class ConditionedMergeJoinKernel::Impl {
     auto fill_null_name = "fill_null_" + relation_id;
     auto found_match_name = "found_" + relation_id;
     auto range_id = "range_" + relation_id + "_i";
+    auto streamed_range_name = "streamed_range_" + relation_id;
+    auto streamed_range_id = "streamed_range_" + relation_id + "_i";
     auto build_relation = "sort_relation_" + relation_id + "_";
     auto streamed_relation = "sort_relation_" + std::to_string(relation_id_[1]) + "_";
     auto left_index_name = "left_index_" + relation_id;
@@ -583,8 +604,13 @@ class ConditionedMergeJoinKernel::Impl {
     ///////////////////////////
 
     if (use_relation_for_stream) {
+      codes_ss << "auto " << streamed_range_name << " = " << streamed_relation
+               << "->GetSameKeyRange();" << std::endl;
+      codes_ss << "for (int " << streamed_range_id << " = 0; " << streamed_range_id
+               << " < " << streamed_range_name << "; " << streamed_range_id << "++) {"
+               << std::endl;
       codes_ss << "auto " << right_index_name << " = " << streamed_relation
-               << "->GetItemIndexWithShift(0);" << std::endl;
+               << "->GetItemIndexWithShift(" << streamed_range_id << ");" << std::endl;
     }
     codes_ss << "for (int " << range_id << " = 0; " << range_id << " < 1;" << range_id
              << "++) {" << std::endl;
@@ -606,10 +632,6 @@ class ConditionedMergeJoinKernel::Impl {
       codes_ss << "}" << std::endl;
       codes_ss << "}" << std::endl;
       codes_ss << "if (!" << found_match_name << ") {" << std::endl;
-      if (use_relation_for_stream) {
-        codes_ss << "if ((should_stop_ = !" << streamed_relation << "->Next())) break;"
-                 << std::endl;
-      }
       codes_ss << "continue;" << std::endl;
       codes_ss << "}" << std::endl;
       codes_ss << set_value << std::endl;
@@ -618,8 +640,8 @@ class ConditionedMergeJoinKernel::Impl {
     }
     finish_codes_ss << "} // end of semi Join" << std::endl;
     if (use_relation_for_stream) {
-      finish_codes_ss << "if (" << found_match_name << ")" << std::endl;
-      finish_codes_ss << "should_stop_ = !" << streamed_relation << "->Next();"
+      finish_codes_ss << "} // end of semi Join" << std::endl;
+      finish_codes_ss << "should_stop_ = !" << streamed_relation << "->NextNewKey();"
                       << std::endl;
     }
     (*output)->process_codes += codes_ss.str();
@@ -641,6 +663,8 @@ class ConditionedMergeJoinKernel::Impl {
     auto fill_null_name = "fill_null_" + relation_id;
     auto found_match_name = "found_" + relation_id;
     auto range_id = "range_" + relation_id + "_i";
+    auto streamed_range_name = "streamed_range_" + relation_id;
+    auto streamed_range_id = "streamed_range_" + relation_id + "_i";
     auto build_relation = "sort_relation_" + relation_id + "_";
     auto streamed_relation = "sort_relation_" + std::to_string(relation_id_[1]) + "_";
     auto left_index_name = "left_index_" + relation_id;
@@ -671,8 +695,13 @@ class ConditionedMergeJoinKernel::Impl {
     }
     ///////////////////////////
     if (use_relation_for_stream) {
+      codes_ss << "auto " << streamed_range_name << " = " << streamed_relation
+               << "->GetSameKeyRange();" << std::endl;
+      codes_ss << "for (int " << streamed_range_id << " = 0; " << streamed_range_id
+               << " < " << streamed_range_name << "; " << streamed_range_id << "++) {"
+               << std::endl;
       codes_ss << "auto " << right_index_name << " = " << streamed_relation
-               << "->GetItemIndexWithShift(0);" << std::endl;
+               << "->GetItemIndexWithShift(" << streamed_range_id << ");" << std::endl;
     }
     codes_ss << "for (int " << range_id << " = 0; " << range_id << " < 1;" << range_id
              << "++) {" << std::endl;
@@ -705,7 +734,8 @@ class ConditionedMergeJoinKernel::Impl {
     }
     finish_codes_ss << "} // end of Existence Join" << std::endl;
     if (use_relation_for_stream) {
-      finish_codes_ss << "should_stop_ = !" << streamed_relation << "->Next();"
+      finish_codes_ss << "} // end of Existence Join" << std::endl;
+      finish_codes_ss << "should_stop_ = !" << streamed_relation << "->NextNewKey();"
                       << std::endl;
     }
     (*output)->process_codes += codes_ss.str();
@@ -741,10 +771,8 @@ class ConditionedMergeJoinKernel::Impl {
         arguments = left_index_name + ".array_id, " + left_index_name + ".id";
         valid_ss << output_validity << " = !" << fill_null_name << " && !" << name
                  << "->IsNull(" << arguments << ");" << std::endl;
-        valid_ss << "if (" << output_validity << ") {" << std::endl;
         valid_ss << output_name << " = " << name << "->GetValue(" << arguments << ");"
                  << std::endl;
-        valid_ss << "}" << std::endl;
 
       } else {                         /*right(streamed) table*/
         if (use_relation_for_stream) { /* use sort relation in streamed side*/
@@ -761,10 +789,8 @@ class ConditionedMergeJoinKernel::Impl {
             arguments = right_index_name + ".array_id, " + right_index_name + ".id";
             valid_ss << output_validity << " = !" << name << "->IsNull(" << arguments
                      << ");" << std::endl;
-            valid_ss << "if (" << output_validity << ") {" << std::endl;
             valid_ss << output_name << " = " << name << "->GetValue(" << arguments << ");"
                      << std::endl;
-            valid_ss << "}" << std::endl;
           }
         } else { /* use previous output in streamed side*/
           if (exist_index_ != -1 && exist_index_ == i) {
